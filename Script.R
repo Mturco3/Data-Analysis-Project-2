@@ -2,9 +2,11 @@
 
 library(ggplot2)
 library(dplyr)
+library(skimr)
 library(readr)
 library(sf)
 library(usmap)
+library(grid)
 library(gridExtra)
 library(corrplot)
 library(caret)
@@ -21,80 +23,89 @@ categorical_variables = c("State", "International.plan", "Voice.mail.plan", "Are
 target_variable = "Churn"
 numerical_variables = setdiff(variables, c(categorical_variables, target_variable))
 
+# Ensuring that variables are converted in the correct form
+Data[[target_variable]] = as.factor(Data[[target_variable]])
 for (var in numerical_variables) {
   Data[[var]] = as.numeric(Data[[var]])
 }
-
 for (var in categorical_variables) {
   Data[[var]] = as.factor(Data[[var]])
 }
 
-Data[[target_variable]] = as.factor(Data[[target_variable]])
+rm(var) # Dropping the variable used in the for loop
 
+# Showing the results
 str(Data)
-
-
-
 
 # EDA
 
+# Showing the name of the variables in the dataset
 print(variables)
 
+# Counting number of distinct features for each variable before a more accurate EDA
 for (col in variables) {
   print(paste("Number of distinct values in",col, "is", length(unique(Data[[col]]))))
   cat("\n")
 }
+rm(col) # Dropping the variable used in the for loop
+
+# Data summary with Skim library
+skim(Data)
+
 
 ## TARGET VARIABLE DISTRIBUTION 
 
-plot_list_target_variable = list()
-
-
-pie_chart_plot = ggplot(Data, aes(x = Churn, fill = Churn)) + 
-  geom_bar(color = "black", alpha = 0.7) + 
-  ggtitle("Distribution of Churn") + 
-  xlab("Churn") + 
-  ylab("Count") + 
-  scale_fill_manual(values = c("red", "blue")) + 
-  theme_minimal() + 
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(size = 14, face = "bold"),
-    axis.text.x = element_text(size = 12, face = 'bold'),
-    axis.text.y = element_text(size = 12, face = 'bold'),
-  )
-
+# Computing churn count and proportion
 count_df = Data %>%
   count(Churn, name = "Count")
 count_df$proportion = count_df$Count/sum(count_df$Count)
 
 
-histogram_plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = Churn)) + 
-  geom_bar(width = 1, stat = "identity", color = "black", size = 0.6) + 
-  theme_classic() + 
+histogram_plot = ggplot(Data, aes(x = Churn, fill = Churn)) + 
+  geom_bar(color = "black", alpha = 0.7) +
+  geom_text(stat='count', aes(label=after_stat(count)), vjust= 2) + 
+  ggtitle("Churn Count") + 
+  scale_fill_manual(values = c("red", "blue")) + 
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 10),
+    legend.position = "none",
+  )
+
+# Creating pie histogram plot with ggplot library
+piechart_plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = Churn)) + 
+  geom_bar(stat = "identity", color = "black", alpha = 0.7) + 
   coord_polar("y") +
+  theme_minimal() + 
   geom_text(aes(label = paste0(round(proportion * 100, 0), "%")), 
             position = position_stack(vjust = 0.5)) + 
   labs(x = NULL, y = NULL, fill = NULL, 
-       title = paste("Distribution of Churn")) + 
-  guides(fill = guide_legend(reverse = TRUE)) + 
+       title = paste("Churn Proportion")) + 
   scale_fill_manual(values = c("red", "blue", "green")) +
   theme(axis.line = element_blank(),
         axis.text = element_blank(),
         axis.ticks = element_blank(),
-        plot.title = element_text(hjust = 0.5))
+        plot.title = element_text(hjust = 0.5, size = 12),
+        panel.grid = element_blank())
 
-plot_list_target_variable[["pie_chart"]] = pie_chart_plot
-plot_list_target_variable[["histogram"]] = histogram_plot
-combined_plot_target_variable <- do.call(grid.arrange, c(plot_list_target_variable, nrow = 1, ncol = 2))
+# Representing the plots
 
+combined_plot = grid.arrange(
+  arrangeGrob(histogram_plot, piechart_plot, nrow = 1, ncol = 2),
+  top = textGrob("Target Variable Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+)
 
 
 ## CATEGORICAL VARIABLES
 
-plot_list = list()
+# We are going to analyze both the distribution of the variables themselves
+# and also the histogram considering the relationship with churn
 
+plot_list = list()
 plot_list_relationship = list()
 
 # Loop through the categorical variables to create individual plots
@@ -109,9 +120,9 @@ for (variable in categorical_variables) {
     ylab("Count") + 
     theme_minimal() + 
     theme(
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-      axis.title.x = element_text(size = 14, face = "bold"),
-      axis.title.y = element_text(size = 14, face = "bold"),
+      plot.title = element_text(hjust = 0.5, size = 16),
+      axis.title.x = element_text(size = 14),
+      axis.title.y = element_text(size = 14),
       axis.text.x = element_text(size = 12),
       axis.text.y = element_text(size = 12),
       legend.title = element_text(size = 14),
@@ -125,7 +136,7 @@ for (variable in categorical_variables) {
  
   
   plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = !!sym(variable))) + 
-    geom_bar(width = 1, stat = "identity", color = "black", size = 0.6) + 
+    geom_bar(width = 1, stat = "identity", color = "black", alpha = 0.7) + 
     theme_classic() + 
     coord_polar("y") +
     geom_text(aes(label = paste0(round(proportion * 100, 0), "%")), 
@@ -147,8 +158,8 @@ for (variable in categorical_variables) {
 }
 
 # Arrange the plots in a grid layout
-combined_plot <- do.call(grid.arrange, c(plot_list, nrow = 2, ncol = 2))
-combined_plot_relationship <- do.call(grid.arrange, c(plot_list_relationship, nrow = 2, ncol = 2))
+combined_plot = do.call(grid.arrange, c(plot_list, nrow = 2, ncol = 2))
+combined_plot_relationship = do.call(grid.arrange, c(plot_list_relationship, nrow = 2, ncol = 2))
 
 
 ## CHURN VS STATE
