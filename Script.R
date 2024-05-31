@@ -11,7 +11,10 @@ library(gridExtra)
 library(corrplot)
 library(caret)
 library(ROSE)
-
+library(latex2exp)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
 
 # Importing Dataset
 Data = read.csv2("./Dataset/TelecomChurn.csv", 
@@ -22,6 +25,7 @@ variables = colnames(Data)
 categorical_variables = c("State", "International.plan", "Voice.mail.plan", "Area.code")
 target_variable = "Churn"
 numerical_variables = setdiff(variables, c(categorical_variables, target_variable))
+predictors = setdiff(variables, target_variable)
 
 # Ensuring that variables are converted in the correct form
 Data[[target_variable]] = as.factor(Data[[target_variable]])
@@ -56,9 +60,9 @@ skim(Data)
 ## TARGET VARIABLE DISTRIBUTION 
 
 # Computing churn count and proportion
-count_df = Data %>%
+churn_distribution = Data %>%
   count(Churn, name = "Count")
-count_df$proportion = count_df$Count/sum(count_df$Count)
+churn_distribution$proportion = churn_distribution$Count/sum(churn_distribution$Count)
 
 # Creating histogram with ggplot library
 histogram_plot = ggplot(Data, aes(x = Churn, fill = Churn)) + 
@@ -77,7 +81,7 @@ histogram_plot = ggplot(Data, aes(x = Churn, fill = Churn)) +
   )
 
 # Creating pie histogram plot with ggplot library
-piechart_plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = Churn)) + 
+piechart_plot = ggplot(data = churn_distribution, aes(x = "", y = proportion, fill = Churn)) + 
   geom_bar(stat = "identity", color = "black", alpha = 0.7) +
   coord_polar("y") +
   theme_minimal() + 
@@ -94,18 +98,21 @@ piechart_plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = Churn
 
 # Representing the plots
 
-combined_plot = grid.arrange(
+grid.arrange(
   arrangeGrob(histogram_plot, piechart_plot, nrow = 1, ncol = 2),
   top = textGrob("Target Variable Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
 )
 
+# Removing useless elements
+rm(histogram_plot)
+rm(piechart_plot)
 
 ## CATEGORICAL VARIABLES
 
 # We are going to analyze both the distribution of the variables themselves
 # and also the histogram considering the relationship with churn
 
-# Create vectors to store plots
+# Initialize vectors to store plots
 plot_list = list()
 plot_list_relationship = list()
 
@@ -189,14 +196,13 @@ grid.arrange(
 )
 
 # Removing useless variables
-rm(binwidth)
 rm(legend)
-rm(histogram_plot)
-rm(piechart_plot)
+rm(plot_list)
+rm(plot_list_relationship)
 rm(plot)
-rm(plot_list_numerical)
-
-
+rm(plot_relationship)
+rm(variable)
+rm(count_df)
 
 ## CHURN VS STATE
 
@@ -204,13 +210,13 @@ rm(plot_list_numerical)
 
 Data$ChurnNumeric = ifelse(Data$Churn == "True", 1, 0)
 
-churn_rate = Data %>%
+churn_rate_states = Data %>%
   group_by(State) %>%
   summarize(ChurnRate = mean(ChurnNumeric))
 
 states = statepop
 names(states)[names(states) == "abbr"] <- "State"
-churn_rate_states <- merge(states, churn_rate, by = "State", all.x = TRUE)
+churn_rate_states = merge(states, churn_rate_states, by = "State", all.x = TRUE)
 
 plot_usmap(data = churn_rate_states, values = "ChurnRate", labels = TRUE) +
   scale_fill_gradient(low = "lightblue",
@@ -226,6 +232,10 @@ plot_usmap(data = churn_rate_states, values = "ChurnRate", labels = TRUE) +
 # Dropping variables since it is now useless
 Data$ChurnNumeric = NULL
 
+# Removing useless Data
+rm(states)
+rm(churn_rate_states)
+
 ### CHI SQUARED TEST
 
 # Create a contingency table and perform the chi-squared test. Then we report the results
@@ -233,10 +243,13 @@ contingency_table = table(Data$State, Data$Churn)
 chi_squared_test = chisq.test(contingency_table)
 print(chi_squared_test)
 
+# Removing useless data and variables
+rm(chi_squared_test)
+rm(contingency_table)
+
 ## X-squared = 83.044, df = 50, p-value = 0.002296. Since the p-value is lower than 0.05, we 
 ## can reject the null hypothesis and hence there is a significant association between the two variables.
 
-## -------------------------------- ALL CORRECT --------------------------------
 
 ## NUMERICAL VARIABLES
 
@@ -250,7 +263,6 @@ plot_list_numerical = list()
 
 # Loop through each numerical variable to create individual histograms
 for (variable in numerical_variables) {
-  
   # Setting appropriate bin width
   binwidth = ceiling(max(Data[[variable]], na.rm = TRUE)/10)
   
@@ -269,46 +281,70 @@ for (variable in numerical_variables) {
       axis.text.y = element_text(size = 12)
     )
   
-  # 
-  plot_numerical_relationship = ggplot(Data, aes(x = Churn, y = variable, fill = Churn)) + 
-    geom_boxplot() + 
-    ggtitle("Total Day Minutes by Churn Status") + 
-    xlab("Churn") + 
-    ylab("Total Day Minutes") +
-    scale_fill_manual(values = c("red", "blue")) +
+  # Creating 
+  plot_numerical_relationship = ggplot(Data, aes_string(x = variable, fill = "Churn")) +
+    geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
+    labs(title = variable) +
     theme_minimal() +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 16),
-      axis.title.x = element_text(size = 14),
-      axis.title.y = element_text(size = 14),
-      axis.text.x = element_text(size = 12),
-      axis.text.y = element_text(size = 12),
-    )
+      plot.title = element_blank(),
+      axis.title.x = element_text(size = 12),
+      axis.title.y = element_blank(),
+      axis.text.x = element_text(size = 10),
+      axis.text.y = element_text(size = 10)
+    ) +
+    scale_fill_manual(name = "Churn", labels = c("No", "Yes"), values = c("blue", "red"))
   
+  # Storing legend
+  legend = get_legend(ggplot(Data, aes_string(x = variable, fill = "Churn")) +
+                        geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
+                        labs(title = variable) +
+                        theme_minimal() +
+                        theme(legend.title = element_text(size = 14),
+                              legend.text = element_text(size = 12),
+                              legend.direction = "horizontal") +
+                        scale_fill_manual(name = "Churn", labels = c("No", "Yes"), values = c("blue", "red"))
+                      ) 
   
   # Add the plot to the list
   plot_list_numerical[[variable]] = plot_numerical
   plot_list_numerical_relationship[[variable]] = plot_numerical_relationship
 }
 
+# Plotting the results
 grid.arrange(
   arrangeGrob(grobs = plot_list_numerical, nrow = 5, ncol = 3),
   top = textGrob("Numerical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
 )
 
-# TO ADJUST
 grid.arrange(
   arrangeGrob(grobs = plot_list_numerical_relationship, nrow = 5, ncol = 3),
-  top = textGrob("Numerical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+  top = textGrob("Numerical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold")),
+  bottom = legend,
+  left = textGrob("Count", rot = 90, gp = gpar(fontsize = 14))
 )
 
 # Removing variables that are now useless
+# rm(means_vec)
+# rm(median_vec)
+# rm(sd_vec)
+rm(binwidth)
+rm(plot_list_numerical)
+rm(plot_numerical)
+rm(plot_list_numerical_relationship)
+rm(plot_numerical_relationship)
+rm(variable)
+rm(get_legend)
+rm(legend)
 rm(means_vec)
 rm(median_vec)
 rm(sd_vec)
 
+# We have to better analyze the relationship between churn and total day minutes,
+# since the data suggest that customers that churn have an higher total day minutes.
+# Also, it seems that customers who made more service calls are more inclined to churn.
 
-## CHURN AND TOTAL DAY MINUTES 
+### CHURN AND TOTAL DAY MINUTES 
 
 ggplot(Data, aes(x = Churn, y = `Total.day.minutes`, fill = Churn)) + 
   geom_boxplot() + 
@@ -325,11 +361,48 @@ ggplot(Data, aes(x = Churn, y = `Total.day.minutes`, fill = Churn)) +
     axis.text.y = element_text(size = 12),
   )
 
+# Perform an ANOVA to test the hypothesis H0 that the two means (of the groups),
+# are the same, suggesting that having more minutes is not a valid indicator for Churn.
+
+anova_total_minutes = aov(Total.day.minutes ~ Churn, data = Data)
+summary(anova_total_minutes)
+
+# Dropping variables
+rm(anova_total_minutes)
+
+### CHURN AND CUSTOMER SERVICE CALLS
+
+ggplot(Data, aes_string(x = "Customer.service.calls", fill = "Churn")) +
+  geom_histogram(position = "identity", alpha = 0.7, binwidth = 0.5) +
+  ggtitle("Customer Service Calls by Churn Status") + 
+  xlab("Service Calls") + 
+  ylab("Count") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  ) +
+  scale_x_continuous(breaks = 0:9) +
+  scale_fill_manual(name = "Churn", labels = c("No", "Yes"), values = c("blue", "red"))
+
+# Perform an ANOVA to test the hypothesis H0 that the two means (of the groups),
+# are the same, suggesting that having more minutes is not a valid indicator for Churn.
+
+anova_service_calls = aov(Customer.service.calls ~ Churn, data = Data)
+summary(anova_service_calls)
+
+# Dropping variables
+rm(anova_service_calls)
+
+
 ## CORRELATION ANALYSIS
 
 ### COLLINEARITY
 
-cor_matrix <- cor(Data[numerical_variables], use="complete.obs")
+cor_matrix = cor(Data[numerical_variables], use="complete.obs")
 corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
          addCoef.col = "black", 
          number.cex = 0.7,
@@ -340,12 +413,12 @@ corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
 
 ### CORRELATION WITH TARGET VARIABLE
 
+# Compute and store correlations
 target_variable_numeric = as.numeric(Data$Churn)
-
-correlations <- sapply(Data[numerical_variables], function(x) cor(x, target_variable_numeric, use = "complete.obs"))
+correlations = sapply(Data[numerical_variables], function(x) cor(x, target_variable_numeric, use = "complete.obs"))
 
 # Omit the target variable from the plot if it's included in the Data frame
-correlations <- abs(correlations[names(correlations) != "target_var"])
+correlations = abs(correlations[names(correlations) != "target_var"])
 
 # Create the bar plot with larger font size for names, then restore default sizes
 par(mar = c(5, 8, 4, 2) + 0.1)  
@@ -356,6 +429,10 @@ barplot(correlations,
         las=2, 
         col = "deepskyblue")
 par(mar = c(5, 4, 4, 2) + 0.1) 
+
+# Dropping variables 
+rm(correlations)
+rm(target_variable_numeric)
 
 
 ## PREPROCESSING
@@ -368,6 +445,9 @@ print(paste("There are", duplicates, "duplicates rows in the Dataset"))
 
 # No need to deal with duplicates
 
+# Removing variables
+rm(duplicates)
+
 ### DEALING WITH MISSING VALUES
 
 #Renaming missing values with NA notation, and counting how many rows contain missing values, then printing result
@@ -378,6 +458,10 @@ cat("Rows with NA before preprocessing:", rows_with_na, "\n")
 
 # No need to deal with missing values
 
+# Removing variables
+rm(rows_with_na)
+rm(na_counts_per_row)
+
 ### DEALING WITH COLLINEARITY
 
 # We have seen in our EDA that there are more features with a really high correlation
@@ -386,11 +470,11 @@ cat("Rows with NA before preprocessing:", rows_with_na, "\n")
 cor_matrix[!lower.tri(cor_matrix)] = 0
 
 # Find the pairs with correlation greater than the threshold
-threshold <- 0.8
-high_corr_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+threshold = 0.8
+high_corr_pairs = which(abs(cor_matrix) > threshold, arr.ind = TRUE)
 
 # Create a data frame with the results
-high_corr_df <- data.frame(
+high_corr_df = data.frame(
   Variable1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
   Variable2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
   Correlation = cor_matrix[high_corr_pairs]
@@ -403,7 +487,17 @@ for (variable in variables_to_drop) {
   cat("Dropped", variable)
   cat("\n")
   numerical_variables = setdiff(numerical_variables, variable)
+  variables = setdiff(variables, variable)
+  predictors = setdiff(predictors, variable)
 }
+
+# Dropping useless variable
+rm(variable)
+rm(variables_to_drop)
+rm(high_corr_df)
+rm(high_corr_pairs)
+rm(threshold)
+rm(cor_matrix)
 
 ### DEALING WITH CATEGORICAL VARIABLE WITH TOO MANY LEVELS
 
@@ -426,13 +520,22 @@ find_region <- function(state) {
 }
 
 # Apply the function to each state in the data frame to add the region column
-Data$region = sapply(Data$State, find_region)
+Data$Region = sapply(Data$State, find_region)
 
 # Converting region in a factor and dropping (but storing) the State variable
-Data$region = as.factor(Data$region)
+Data$Region = as.factor(Data$Region)
 states = Data$State
 Data$State = NULL
+variables = setdiff(variables, "State")
+categorical_variables = setdiff(categorical_variables, "State")
+predictors = setdiff(predictors, "State")
+variables = c(variables, "Region")
+categorical_variables = c(categorical_variables, "Region")
+predictors = c(predictors, "Region")
 
+# Dropping variables
+rm(dic)
+rm(find_region)
 
 
 ## DATASET SPLIT
@@ -441,9 +544,9 @@ Data$State = NULL
 
 set.seed(1)
 
-id_train <- sample(1:nrow(Data), size = 0.75*nrow(Data), replace = F)
-train_data <- Data[id_train,]
-test_data <- Data[-id_train,]
+id_train = sample(1:nrow(Data), size = 0.75*nrow(Data), replace = F)
+train_data = Data[id_train,]
+test_data = Data[-id_train,]
 
 # Response variable distribution in the original data
 cat("Distribution of the target variable in the original set:\n")
@@ -472,13 +575,10 @@ print(prop.table(table(test_data$Churn)))
 
 set.seed(1)
 
-# Get the class counts
-class_counts <- table(train_data$Churn)
-min_class_count <- min(class_counts)
 
 # Calculate the total number of samples needed for balanced under sampling
 # We want each class to have min_class_count samples
-target_N <- 2 * min_class_count
+target_N = 2 * min(table(train_data$Churn))
 
 # Perform under sampling
 train_data_undersample <- ovun.sample(Churn ~ ., data = train_data, method = "under", N = target_N)$data
@@ -490,19 +590,13 @@ print(table(train_data_undersample$Churn))
 cat("Proportions:")
 print(prop.table(table(train_data_undersample$Churn)))
 
-# Dropping useless variables
-rm(min_class_count)
-rm(target_N)
-
 ### OVERSAMPLING
 
 set.seed(1)
 
-max_class_count <- max(class_counts)
-
 # Calculate the total number of samples needed for balanced oversampling
 # We want each class to have max_class_count samples
-target_N <- 2 * max_class_count
+target_N <- 2 * max(table(train_data$Churn))
 
 # Perform oversampling
 train_data_oversample <- ovun.sample(Churn ~ ., data = train_data, method = "over", N = target_N)$data
@@ -515,17 +609,15 @@ cat("Proportions:")
 print(prop.table(table(train_data_oversample$Churn)))
 
 # Dropping useless variables
-rm(max_class_count)
 rm(target_N)
-rm(class_counts)
 
 ### SCALING
 
 cols_to_scale = numerical_variables
 
 # Normal data
-train_mean <- apply(train_data[, cols_to_scale], MARGIN = 2, FUN = mean)
-train_sd <- apply(train_data[, cols_to_scale], MARGIN = 2, FUN = sd)
+train_mean = apply(train_data[, cols_to_scale], MARGIN = 2, FUN = mean)
+train_sd = apply(train_data[, cols_to_scale], MARGIN = 2, FUN = sd)
 train_data_scaled = train_data
 train_data_scaled[, cols_to_scale] = scale(train_data[, cols_to_scale], 
                                                       center = train_mean, 
@@ -534,16 +626,16 @@ train_data_scaled[, cols_to_scale] = scale(train_data[, cols_to_scale],
 # Oversample data
 train_oversample_mean = apply(train_data_oversample[, cols_to_scale], MARGIN = 2, FUN = mean)
 train_overssample_sd = apply(train_data_oversample[, cols_to_scale], MARGIN = 2, FUN = sd)
-train_data_oversample_scaled = train_data_oversample
-train_data_oversample_scaled[, cols_to_scale] = scale(train_data_oversample[, cols_to_scale], 
+train_data_scaled_oversample = train_data_oversample
+train_data_scaled_oversample[, cols_to_scale] = scale(train_data_oversample[, cols_to_scale], 
                                                       center = train_oversample_mean, 
                                                       scale = train_overssample_sd)
 
 # Undersample data
 train_undersample_mean = apply(train_data_undersample[, cols_to_scale], MARGIN = 2, FUN = mean)
 train_undersample_sd = apply(train_data_undersample[, cols_to_scale], MARGIN = 2, FUN = sd)
-train_data_undersample_scaled = train_data_undersample
-train_data_undersample_scaled[, cols_to_scale] = scale(train_data_undersample[, cols_to_scale], 
+train_data_scaled_undersample = train_data_undersample
+train_data_scaled_undersample[, cols_to_scale] = scale(train_data_undersample[, cols_to_scale], 
                                                       center = train_undersample_mean, 
                                                       scale = train_undersample_sd)
 
@@ -563,6 +655,15 @@ test_data_scaled_undersample = test_data
 test_data_scaled_undersample[, cols_to_scale] = scale(test_data_scaled_undersample[, cols_to_scale], 
                                                       center = train_undersample_mean, 
                                                       scale = train_undersample_sd)
+# Dropping useless variables
+rm(cols_to_scale)
+rm(train_mean)
+rm(train_oversample_mean)
+rm(train_undersample_mean)
+rm(train_sd)
+rm(train_overssample_sd)
+rm(train_undersample_sd)
+rm(id_train)
 
 ## LOW DIMENSIONAL MODEL
 
@@ -679,6 +780,10 @@ ggplot(Data, aes(x = Total.day.minutes, y = predicted_probabilities, color = Int
 # We drop the column of predicted probabilities since it is now useless
 train_data_undersample$predicted_probabilities = NULL
 
+# Dropping the models that are not going to be used again
+rm(model_international_minutes)
+rm(model_international_minutes_oversample)
+rm(model_international_minutes_undersample)
 
 ### LOGISTIC REGRESSION MODEL WITH CUSTOMER SERVICE CALLS
 
@@ -793,14 +898,98 @@ ggplot(Data, aes(x = Customer.service.calls, y = predicted_probabilities)) +
 # We drop the column of predicted probabilities since it is now useless
 train_data_undersample$predicted_probabilities = NULL
 
+# Dropping useless models
+
+rm(model_customer_service_calls)
+rm(model_customer_service_calls_oversample)
+rm(model_customer_service_calls_undersample)
+
+### CLASSIFICATION TREE
+
+#### Normal Data
+
+simple_tree = rpart(Churn ~ Total.day.minutes + International.plan + Customer.service.calls, 
+              data = train_data, 
+              method = "class")
+
+# Plotting tree
+rpart.plot(simple_tree, main = "Classification Tree - Normal Data")
+
+# Print the complexity parameter table
+printcp(simple_tree)
+
+# Calculate and print variable importance
+importance_normal = varImp(simple_tree, scale = FALSE)
+print(importance_normal)
+
+# Compute and print the confusion matrix
+predictions_tree = predict(simple_tree, train_data, type = "class")
+confusion_matrix_tree = table(predictions_tree, train_data$Churn)
+print(confusion_matrix_tree)
+
+# Dropping useless variables
+rm(simple_tree)
+rm(importance_normal)
+rm(predictions_tree)
+rm(confusion_matrix_tree)
+
+#### Undersample Data
+
+simple_tree_undersample = rpart(Churn ~ Total.day.minutes + International.plan + Customer.service.calls, 
+                                data = train_data_undersample, 
+                                method = "class")
+
+# Plotting tree
+rpart.plot(simple_tree_undersample, main = "Classification Tree - Undersample Data")
+
+# Print the complexity parameter table
+printcp(simple_tree_undersample)
+
+# Calculate and print variable importance
+importance_normal_undersample = varImp(simple_tree_undersample, scale = FALSE)
+print(importance_normal_undersample)
+
+# Compute and print the confusion matrix
+predictions_tree_undersample = predict(simple_tree_undersample, train_data_undersample, type = "class")
+confusion_matrix_tree_undersample = table(predictions_tree_undersample, train_data_undersample$Churn)
+print(confusion_matrix_tree_undersample)
+
+# Dropping useless variables
+rm(simple_tree_undersample)
+rm(importance_normal_undersample)
+rm(predictions_tree_undersample)
+rm(confusion_matrix_tree_undersample)
+
+#### Over sample data
+
+simple_tree_oversample = rpart(Churn ~ Total.day.minutes + International.plan + Customer.service.calls, 
+                               data = train_data_oversample, 
+                               method = "class")
+
+# Plotting tree
+rpart.plot(simple_tree_oversample, main = "Classification Tree - Oversample Data")
+
+# Print the complexity parameter table
+printcp(simple_tree_oversample)
+
+# Calculate and print variable importance
+importance_oversample = varImp(simple_tree_oversample, scale = FALSE)
+print(importance_oversample)
+
+predictions_tree_oversample = predict(simple_tree_oversample, train_data_oversample, type = "class")
+confusion_matrix_tree_oversample = table(predictions_tree_oversample, train_data_oversample$Churn)
+print(confusion_matrix_tree_oversample)
+
+# Dropping useless variables
+rm(simple_tree_oversample)
+rm(importance_oversample)
+rm(predictions_tree_oversample)
+rm(confusion_matrix_tree_oversample)
+
+
 # BEST MODEL SELECTION
 
-## Baseline Logistic Regression Model
-
-model_baseline_logistic = glm(Churn ~ ., data = train_data_oversample_scaled, family = "binomial")
-summary(model_baseline_logistic)
-baseline_logistic_predictions = ifelse(predict(model_baseline_logistic, newdata = test_data_scaled_oversample) > 0.5, 1, 0)
-confusion_matrix = table(baseline_logistic_predictions, test_data_scaled_oversample$Churn)
+#### Function to compare performances
 
 get.metrics<- function(conf.mat) {
   true.positives <- conf.mat[2,2]
@@ -821,6 +1010,664 @@ get.metrics<- function(conf.mat) {
   return(metrics)
 }
 
-print(get.metrics(confusion_matrix))
+# Create a list to store every confusion matrix
 
-#### CONTINUE
+confusion_matrices = list()
+
+## Baseline Logistic Regression Model
+
+#### Normal
+
+model_baseline_logistic = glm(Churn ~ ., 
+                              data = train_data_scaled, 
+                              family = "binomial")
+summary(model_baseline_logistic)
+
+# Storing the results in a confusion matrix
+baseline_logistic_predictions = ifelse(predict(model_baseline_logistic, 
+                                               newdata = test_data_scaled) > 0.5, 1, 0)
+confusion_matrix_baseline_logistic = table(baseline_logistic_predictions, 
+                                           test_data_scaled$Churn)
+# Dropping predictions
+rm(baseline_logistic_predictions)
+
+# Storing the c.m. in the list
+confusion_matrices[["model_baseline_logistic"]] = confusion_matrix_baseline_logistic
+
+#### Oversample
+
+model_baseline_logistic_oversample = glm(Churn ~ ., 
+                                         data = train_data_scaled_oversample, 
+                                         family = "binomial")
+summary(model_baseline_logistic_oversample)
+
+# Storing the results in a confusion matrix
+baseline_logistic_predictions_oversample = ifelse(predict(model_baseline_logistic_oversample, 
+                                                          newdata = test_data_scaled_oversample) > 0.5, 1, 0)
+confusion_matrix_baseline_logistic_oversample = table(baseline_logistic_predictions_oversample, 
+                                                      test_data_scaled_oversample$Churn)
+# Dropping predictions
+rm(baseline_logistic_predictions_oversample)
+
+# Storing the c.m. in the list
+confusion_matrices[["model_baseline_logistic_oversample"]] = confusion_matrix_baseline_logistic_oversample
+
+#### Undersample
+
+model_baseline_logistic_undersample = glm(Churn ~ ., 
+                                          data = train_data_scaled_undersample, 
+                                          family = "binomial")
+
+# Storing the results in a confusion matrix
+summary(model_baseline_logistic_undersample)
+baseline_logistic_predictions_undersample = ifelse(predict(model_baseline_logistic_undersample, 
+                                                           newdata = test_data_scaled_undersample) > 0.5, 1, 0)
+confusion_matrix_baseline_logistic_undersample = table(baseline_logistic_predictions_undersample, 
+                                                       test_data_scaled_undersample$Churn)
+# Dropping predictions
+rm(baseline_logistic_predictions_undersample)
+
+# Storing the c.m. in the list
+confusion_matrices[["model_baseline_logistic_undersample"]] = confusion_matrix_baseline_logistic_undersample
+
+
+## Variable selection with AIC and BIC
+
+### AIC
+
+#### Normal
+
+aic_model_forward = step(glm(Churn ~ 1, 
+                              family = "binomial", 
+                              data = test_data_scaled), 
+                          scope = formula(model_baseline_logistic), 
+                          direction = "forward")
+aic_model_backward = step(model_baseline_logistic, direction = "backward")
+aic_model_both = step(model_baseline_logistic, direction = "both")
+
+# We can now consider the number of features selected 
+# (Without considering Intercept)
+num_features_aic_forward = length(coef(aic_model_forward)) - 1  
+num_features_aic_backward = length(coef(aic_model_backward)) - 1
+num_features_aic_both = length(coef(aic_model_both)) - 1
+
+# We are also interested in understanding which are the excluded features
+
+selected_variables_aic_forward = names(coef(aic_model_forward))[-1]  
+selected_variables_aic_backward = names(coef(aic_model_backward))[-1]  
+selected_variables_aic_both = names(coef(aic_model_both))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection", num_features_aic_forward, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_aic_forward) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+cat("With backward selection", num_features_aic_backward, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_backward) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+cat("With both directions selection", num_features_aic_both, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_both) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# We select the simplest model, hence the one with the lowest features selected
+feature_counts = c(forward = num_features_aic_forward, 
+                   backward = num_features_aic_backward, 
+                   both = num_features_aic_both)
+selected_model_name = names(which.min(feature_counts))
+if (selected_model_name == "forward") {
+  model_aic_final = aic_model_forward
+} else if (selected_model_name == "backward") {
+  model_aic_final = final_model <- aic_model_backward
+} else {
+  model_aic_final = aic_model_both
+}
+
+# Computing and storing predictions on the test data
+aic_model_predictions = ifelse(predict(model_aic_final, test_data_scaled) > 0.5, 1, 0)
+confusion_matrix_aic = table(aic_model_predictions, test_data_scaled$Churn)
+confusion_matrices[["aic"]] = confusion_matrix_aic
+
+# Dropping useless models and variables
+rm(aic_model_backward)
+rm(aic_model_both)
+rm(aic_model_forward)
+rm(aic_model_predictions)
+rm(selected_model_name)
+rm(selected_variables_aic_both)
+rm(selected_variables_aic_backward)
+rm(selected_variables_aic_forward)
+rm(num_features_aic_both)
+rm(num_features_aic_backward)
+rm(num_features_aic_forward)
+rm(feature_counts)
+
+
+#### Undersample
+
+aic_model_forward_undersample = step(glm(Churn ~ 1, 
+                              family = "binomial", 
+                              data = test_data_scaled_undersample), 
+                          scope = formula(model_baseline_logistic_undersample), 
+                          direction = "forward")
+aic_model_backward_undersample = step(model_baseline_logistic_undersample, direction = "backward")
+aic_model_both_undersample = step(model_baseline_logistic_undersample, direction = "both")
+
+# Number of features selected by each model
+num_features_aic_forward_undersample = length(coef(aic_model_forward_undersample)) - 1  # Subtract 1 for the intercept
+num_features_aic_backward_undersample = length(coef(aic_model_backward_undersample)) - 1
+num_features_aic_both_undersample = length(coef(aic_model_both_undersample)) - 1
+
+# We are also interested in understanding which are the excluded features
+selected_variables_aic_forward_undersample = names(coef(aic_model_forward_undersample))[-1]  
+selected_variables_aic_backward_undersample = names(coef(aic_model_backward_undersample))[-1]  
+selected_variables_aic_both_undersample = names(coef(aic_model_both_undersample))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection", num_features_aic_forward_undersample, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_aic_forward_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With backward selection", num_features_aic_backward_undersample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_backward_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With both directions selection", num_features_aic_both_undersample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_both_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_undersample = c(forward = num_features_aic_forward_undersample, 
+                               backward = num_features_aic_backward_undersample, 
+                               both = num_features_aic_both_undersample)
+selected_model_name_undersample = names(which.min(feature_counts_undersample))
+
+if (selected_model_name_undersample == "forward") {
+  model_aic_final_undersample = aic_model_forward_undersample
+} else if (selected_model_name_undersample == "backward") {
+  model_aic_final_undersample = aic_model_backward_undersample
+} else {
+  model_aic_final_undersample = aic_model_both_undersample
+}
+
+# Computing and storing predictions on the validation data
+aic_model_predictions_undersample = ifelse(predict(model_aic_final_undersample, test_data_scaled_undersample) > 0.5, 1, 0)
+confusion_matrix_aic_undersample = table(aic_model_predictions_undersample, test_data_scaled_undersample$Churn)
+confusion_matrices[["model_aic_undersample"]] = confusion_matrix_aic_undersample
+
+# Dropping useless variables and models
+
+rm(aic_model_backward_undersample)
+rm(aic_model_both_undersample)
+rm(aic_model_forward_undersample)
+rm(aic_model_predictions_undersample)
+rm(selected_model_name_undersample)
+rm(selected_variables_aic_both_undersample)
+rm(selected_variables_aic_backward_undersample)
+rm(selected_variables_aic_forward_undersample)
+rm(num_features_aic_both_undersample)
+rm(num_features_aic_backward_undersample)
+rm(num_features_aic_forward_undersample)
+rm(feature_counts_undersample)
+
+#### Oversample
+aic_model_forward_oversample = step(glm(Churn ~ 1, 
+                      family = "binomial", 
+                      data = test_data_scaled_oversample), 
+                  scope = formula(model_baseline_logistic_oversample), 
+                  direction = "forward")
+aic_model_backward_oversample = step(model_baseline_logistic_oversample, direction = "backward")
+aic_model_both_oversample = step(model_baseline_logistic_oversample, direction = "both")
+
+# Number of features selected by each model
+num_features_aic_forward_oversample = length(coef(aic_model_forward_oversample)) - 1
+num_features_aic_backward_oversample = length(coef(aic_model_backward_oversample)) - 1
+num_features_aic_both_oversample = length(coef(aic_model_both_oversample)) - 1
+
+# Selected variables
+selected_variables_aic_forward_oversample = names(coef(aic_model_forward_oversample))[-1]
+selected_variables_aic_backward_oversample = names(coef(aic_model_backward_oversample))[-1]
+selected_variables_aic_both_oversample = names(coef(aic_model_both_oversample))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection", num_features_aic_forward_oversample, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_aic_forward_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With backward selection", num_features_aic_backward_oversample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_backward_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With both directions selection", num_features_aic_both_oversample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_aic_both_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_oversample = c(forward = num_features_aic_forward_oversample, 
+                              backward = num_features_aic_backward_oversample, 
+                              both = num_features_aic_both_oversample)
+selected_model_name_oversample = names(which.min(feature_counts_oversample))
+
+if (selected_model_name_oversample == "forward") {
+  model_aic_final_oversample = aic_model_forward_oversample
+} else if (selected_model_name_oversample == "backward") {
+  model_aic_final_oversample = aic_model_backward_oversample
+} else {
+  model_aic_final_oversample = aic_model_both_oversample
+}
+
+# Computing and storing predictions on the validation data
+aic_model_predictions_oversample = ifelse(predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
+confusion_matrix_aic_oversample = table(aic_model_predictions_oversample, test_data_scaled_oversample$Churn)
+confusion_matrices[["aic_model_oversample"]] = confusion_matrix_aic_model_oversample
+
+rm(aic_model_backward_oversample)
+rm(aic_model_both_oversample)
+rm(aic_model_forward_oversample)
+rm(aic_model_predictions_oversample)
+rm(selected_model_name_oversample)
+rm(selected_variables_aic_both_oversample)
+rm(selected_variables_aic_backward_oversample)
+rm(selected_variables_aic_forward_oversample)
+rm(num_features_aic_both_oversample)
+rm(num_features_aic_backward_oversample)
+rm(num_features_aic_forward_oversample)
+rm(feature_counts_oversample)
+
+### BIC
+
+
+#### Normal
+
+bic_model_forward = step(glm(Churn ~ 1, 
+                             family = "binomial", 
+                             data = test_data_scaled), 
+                         scope = formula(model_baseline_logistic), 
+                         direction = "forward",
+                         k = log(nrow(test_data_scaled)))
+bic_model_backward = step(model_baseline_logistic, direction = "backward", k = log(nrow(test_data_scaled)))
+bic_model_both = step(model_baseline_logistic, direction = "both", k = log(nrow(test_data_scaled)))
+
+# Number of features selected by each model
+num_features_bic_forward = length(coef(bic_model_forward)) - 1  
+num_features_bic_backward = length(coef(bic_model_backward)) - 1
+num_features_bic_both = length(coef(bic_model_both)) - 1
+
+# Selected variables
+selected_variables_bic_forward = names(coef(bic_model_forward))[-1]  
+selected_variables_bic_backward = names(coef(bic_model_backward))[-1]  
+selected_variables_bic_both = names(coef(bic_model_both))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection (BIC)", num_features_bic_forward, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_bic_forward) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+cat("With backward selection (BIC)", num_features_bic_backward, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_backward) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+cat("With both directions selection (BIC)", num_features_bic_both, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_both) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_bic = c(forward = num_features_bic_forward, 
+                       backward = num_features_bic_backward, 
+                       both = num_features_bic_both)
+selected_model_name_bic = names(which.min(feature_counts_bic))
+
+if (selected_model_name_bic == "forward") {
+  model_bic_final = bic_model_forward
+} else if (selected_model_name_bic == "backward") {
+  model_bic_final = bic_model_backward
+} else {
+  model_bic_final = bic_model_both
+}
+
+# Computing and storing predictions on the test data
+bic_model_predictions = ifelse(predict(model_bic_final, test_data_scaled, type = "response") > 0.5, 1, 0)
+confusion_matrix_bic = table(bic_model_predictions, test_data_scaled$Churn)
+confusion_matrices[["bic_model"]] = confusion_matrix_bic
+
+rm(bic_model_backward)
+rm(bic_model_both)
+rm(bic_model_forward)
+rm(bic_model_predictions)
+rm(selected_model_name_bic)
+rm(selected_variables_bic_both)
+rm(selected_variables_bic_backward)
+rm(selected_variables_bic_forward)
+rm(num_features_bic_both)
+rm(num_features_bic_backward)
+rm(num_features_bic_forward)
+rm(feature_counts_bic)
+
+#### Undersample
+
+bic_model_forward_undersample = step(glm(Churn ~ 1, 
+                                         family = "binomial", 
+                                         data = test_data_scaled_undersample), 
+                                     scope = formula(model_baseline_logistic_undersample), 
+                                     direction = "forward",
+                                     k = log(nrow(test_data_scaled_undersample)))
+bic_model_backward_undersample = step(model_baseline_logistic_undersample, direction = "backward", k = log(nrow(test_data_scaled_undersample)))
+bic_model_both_undersample = step(model_baseline_logistic_undersample, direction = "both", k = log(nrow(test_data_scaled_undersample)))
+
+# Number of features selected by each model
+num_features_bic_forward_undersample = length(coef(bic_model_forward_undersample)) - 1
+num_features_bic_backward_undersample = length(coef(bic_model_backward_undersample)) - 1
+num_features_bic_both_undersample = length(coef(bic_model_both_undersample)) - 1
+
+# Selected variables
+selected_variables_bic_forward_undersample = names(coef(bic_model_forward_undersample))[-1]
+selected_variables_bic_backward_undersample = names(coef(bic_model_backward_undersample))[-1]
+selected_variables_bic_both_undersample = names(coef(bic_model_both_undersample))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection (BIC)", num_features_bic_forward_undersample, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_bic_forward_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With backward selection (BIC)", num_features_bic_backward_undersample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_backward_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With both directions selection (BIC)", num_features_bic_both_undersample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_both_undersample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_bic_undersample = c(forward = num_features_bic_forward_undersample, 
+                                   backward = num_features_bic_backward_undersample, 
+                                   both = num_features_bic_both_undersample)
+selected_model_name_bic_undersample = names(which.min(feature_counts_bic_undersample))
+
+if (selected_model_name_bic_undersample == "forward") {
+  model_bic_final_undersample = bic_model_forward_undersample
+} else if (selected_model_name_bic_undersample == "backward") {
+  model_bic_final_undersample = bic_model_backward_undersample
+} else {
+  model_bic_final_undersample = bic_model_both_undersample
+}
+
+# Computing and storing predictions on the test data
+bic_model_predictions_undersample = ifelse(predict(model_bic_final_undersample, test_data_scaled_undersample, type = "response") > 0.5, 1, 0)
+confusion_matrix_bic_undersample = table(bic_model_predictions_undersample, test_data_scaled_undersample$Churn)
+confusion_matrices[["model_bic_undersample"]] = confusion_matrix_bic_undersample
+
+rm(bic_model_backward_undersample)
+rm(bic_model_both_undersample)
+rm(bic_model_forward_undersample)
+rm(bic_model_predictions_undersample)
+rm(selected_model_name_bic_undersample)
+rm(selected_variables_bic_both_undersample)
+rm(selected_variables_bic_backward_undersample)
+rm(selected_variables_bic_forward_undersample)
+rm(num_features_bic_both_undersample)
+rm(num_features_bic_backward_undersample)
+rm(num_features_bic_forward_undersample)
+rm(feature_counts_bic_undersample)
+
+
+#### Oversample
+
+bic_model_forward_oversample = step(glm(Churn ~ 1, 
+                                        family = "binomial", 
+                                        data = test_data_scaled_oversample), 
+                                    scope = formula(model_baseline_logistic_oversample), 
+                                    direction = "forward",
+                                    k = log(nrow(test_data_scaled_oversample)))
+bic_model_backward_oversample = step(model_baseline_logistic_oversample, direction = "backward", k = log(nrow(test_data_scaled_oversample)))
+bic_model_both_oversample = step(model_baseline_logistic_oversample, direction = "both", k = log(nrow(test_data_scaled_oversample)))
+
+# Number of features selected by each model
+num_features_bic_forward_oversample = length(coef(bic_model_forward_oversample)) - 1
+num_features_bic_backward_oversample = length(coef(bic_model_backward_oversample)) - 1
+num_features_bic_both_oversample = length(coef(bic_model_both_oversample)) - 1
+
+# Selected variables
+selected_variables_bic_forward_oversample = names(coef(bic_model_forward_oversample))[-1]
+selected_variables_bic_backward_oversample = names(coef(bic_model_backward_oversample))[-1]
+selected_variables_bic_both_oversample = names(coef(bic_model_both_oversample))[-1]
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection (BIC)", num_features_bic_forward_oversample, "features have been selected.")
+cat("\n")
+for (variable in selected_variables_bic_forward_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With backward selection (BIC)", num_features_bic_backward_oversample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_backward_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+cat("With both directions selection (BIC)", num_features_bic_both_oversample, "features have been selected")
+cat("\n")
+for (variable in selected_variables_bic_both_oversample) {
+  cat(variable, "has been selected.")
+  cat("\n")
+}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_bic_oversample = c(forward = num_features_bic_forward_oversample, 
+                                  backward = num_features_bic_backward_oversample, 
+                                  both = num_features_bic_both_oversample)
+selected_model_name_bic_oversample = names(which.min(feature_counts_bic_oversample))
+
+if (selected_model_name_bic_oversample == "forward") {
+  model_bic_final_oversample = bic_model_forward_oversample
+} else if (selected_model_name_bic_oversample == "backward") {
+  model_bic_final_oversample = bic_model_backward_oversample
+} else {
+  model_bic_final_oversample = bic_model_both_oversample
+}
+
+# Computing and storing predictions on the validation data
+bic_model_predictions_oversample = ifelse(predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
+confusion_matrix_bic_oversample = table(bic_model_predictions_oversample, test_data_scaled_oversample$Churn)
+confusion_matrices[["bic_oversample"]] = confusion_matrix_bic_oversample
+
+rm(bic_model_backward_oversample)
+rm(bic_model_both_oversample)
+rm(bic_model_forward_oversample)
+rm(bic_model_predictions_oversample)
+rm(selected_model_name_bic_oversample)
+rm(selected_variables_bic_both_oversample)
+rm(selected_variables_bic_backward_oversample)
+rm(selected_variables_bic_forward_oversample)
+rm(num_features_bic_both_oversample)
+rm(num_features_bic_backward_oversample)
+rm(num_features_bic_forward_oversample)
+rm(feature_counts_bic_oversample)
+rm(variable)
+
+## LASSO REGULARIZATION
+
+set.seed(1)
+ctrl = 
+
+#### Normal data
+
+# Train the Lasso regression model with hyperparameter tuning (lamda) and cross validation
+model_lasso = train(Churn ~ ., 
+                           data = train_data_scaled, 
+                           method = "glmnet", 
+                           metric = "Accuracy", 
+                           trControl = trainControl(method = "cv", number = 10), 
+                           tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+
+# Plot accuracy values against the lambda sequence
+plot(model_lasso,
+     label = T, 
+     xvar = "lambda",
+     yvar = )
+
+# Plot the coefficients
+fit = glmnet(x, y, alpha = 1, lambda = seq(0, 0.15, length = 30))
+plot(fit, xvar = "lambda", label = TRUE)
+
+
+# Retrieve the maximum accuracy and best tuning parameters 
+# achieved during cross-validation
+best_accuracy_lasso = max(lasso_model$results$Accuracy)
+best_parameters_lasso = lasso_model$bestTune
+
+# Computing and storing predictions
+predictions_lasso = predict(lasso_model, test_data_scaled)
+confusion_matrix_lasso = table(predictions_lasso, test_data_scaled$Churn)
+confusion_matrices[["lasso_model"]] = confusion_matrix_lasso
+
+#### Undersample
+
+# Train the Lasso regression model 
+lasso_model_undersample = train(Churn ~ ., 
+                                data = train_data_scaled_undersample, 
+                                method = "glmnet", 
+                                metric = "Accuracy", 
+                                trControl = ctrl, 
+                                tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+
+# Retrieve the maximum accuracy and best tuning parameters 
+# achieved during cross-validation
+max(lasso_model_undersample$results$Accuracy)
+lasso_model_undersample$bestTune
+
+# Computing and storing predictions
+predictions_lasso_undersample = predict(lasso_model_undersample, test_data_scaled_undersample)
+confusion_matrix_lasso_undersample = table(predictions_lasso_undersample, test_data_scaled_undersample$Churn)
+confusion_matrices[["lasso_model_undersample"]] = confusion_matrix_lasso_undersample
+
+#### Oversample
+
+# Train the Lasso regression model on the oversampled dataset
+lasso_model_oversample = train(Churn ~ ., 
+                               data = train_data_scaled_oversample, 
+                               method = "glmnet", 
+                               metric = "Accuracy", 
+                               trControl = ctrl, 
+                               tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+
+# Retrieve the maximum accuracy achieved during cross-validation
+max(lasso_model_oversample$results$Accuracy)
+lasso_model_oversample$bestTune
+
+# Computing and storing predictions
+predictions_lasso_oversample = predict(lasso_model_oversample, test_data_scaled_oversample)
+confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_data_scaled_oversample$Churn)
+confusion_matrices[["lasso_model_oversample"]] = confusion_matrix_lasso_oversample
+
+
+## RIDGE REGRESSION
+
+set.seed(1)
+ctrl = trainControl(method = "cv", number = 10)
+ridge = train(Churn ~ ., 
+              data = train_data_scaled, 
+              method = "glmnet", 
+              metric = "Accuracy", 
+              trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+max(ridge$results$Accuracy)
+ridge$bestTune
+
+ridge.plot = ridge %>% 
+  ggplot(aes(x = lambda, y = Accuracy)) + 
+  geom_line() + 
+  geom_point() +
+  geom_text(aes(label = sprintf("%.3f", Accuracy)), check_overlap = TRUE, vjust = -0.5, size = 2.5) + 
+  labs(x = TeX("Lambda ($\\lambda$)"), y = "Accuracy", title = "Accuracy vs. Lambda for Ridge Regularization") +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+ridge.plot
+
+
+## RANDOM FORESTS
+
+#### Normal Data
+
+set.seed(1)
+random_forest_model = randomForest(Churn ~ ., data = train_data_oversample, 
+                                   mtry = 5, 
+                                   ntree = 500, 
+                                   importance = T) 
+importance(random_forest_model)
+
+
+
+varImpPlot(fit_bag)
+
+
+validation.preds = predict(fit_bag, newdata = test_data)
+confusion_matrix_random_forest = table(validation.preds, test_data$Churn)
+print(confusion_matrix_random_forest)
+
+#### Hyperparameter tuning
+
+# Train the model using cross-validation and grid search
+rf_random_search = train(Churn ~ ., data = train_data, 
+                       method = "rf", 
+                       metric = "Accuracy", 
+                       tuneGrid = expand.grid(mtry = c(2, 4, 6, 8, 10, 12)), 
+                       trControl = trainControl(method = "cv", number = 5)
+                       )
+print(rf_random_search)
+
+
+
+
+# Make predictions on the test set using the best model
+prediction = predict(rf_gridsearch, newdata = test_data)
+
+# Confusion matrix
+confusion_matrix_random_forest = table(validation.preds, test_data$Churn)
+print(confusion_matrix_random_forest)
+
+
+
