@@ -12,9 +12,11 @@ library(corrplot)
 library(caret)
 library(ROSE)
 library(latex2exp)
+library(glmnet)
 library(rpart)
 library(rpart.plot)
 library(randomForest)
+library(doParallel)
 
 # Importing Dataset
 Data = read.csv2("./Dataset/TelecomChurn.csv", 
@@ -698,8 +700,8 @@ ggplot(Data, aes(x = Total.day.minutes, y = predicted_probabilities, color = Int
     axis.title.y = element_text(size = 14, face = "bold"),  
     axis.text.x = element_text(size = 12, color = "black"),  
     axis.text.y = element_text(size = 12, color = "black"),  
-    panel.grid.major = element_line(color = "gray", size = 0.5),  
-    panel.grid.minor = element_line(color = "lightgray", size = 0.25),  
+    panel.grid.major = element_line(color = "gray", linewidth = 0.5),  
+    panel.grid.minor = element_line(color = "lightgray", linewidth = 0.25),  
     panel.background = element_rect(fill = "white") 
   )
 
@@ -1070,6 +1072,24 @@ rm(baseline_logistic_predictions_undersample)
 # Storing the c.m. in the list
 confusion_matrices[["model_baseline_logistic_undersample"]] = confusion_matrix_baseline_logistic_undersample
 
+#### Comparisson with the simplest model (without any variable)
+
+# Since the model with the best performance was the one trained with oversample data we will consier
+# it for the comparisson
+
+model_0 = glm(Churn ~ 1,
+                   family = "binomial",
+                   data = train_data_scaled_oversample)
+
+anova(model_0, model_baseline_logistic_oversample, test = "Chisq")
+
+# The null model (Model 1) fits the data poorly with a deviance of 5905.6.
+# The full model (Model 2), which includes all the specified predictors, 
+# fits the data significantly better, with a deviance of 4437.3.
+# The reduction in deviance (1468.3) is highly significant, with a p-value < 2.2e-16.
+# Including the predictors in Model 2 significantly improves the fit of the model, 
+# indicating that the predictors collectively provide valuable information in predicting customer 
+# churn.
 
 ## Variable selection with AIC and BIC
 
@@ -1284,7 +1304,7 @@ if (selected_model_name_oversample == "forward") {
 # Computing and storing predictions on the validation data
 aic_model_predictions_oversample = ifelse(predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
 confusion_matrix_aic_oversample = table(aic_model_predictions_oversample, test_data_scaled_oversample$Churn)
-confusion_matrices[["aic_model_oversample"]] = confusion_matrix_aic_model_oversample
+confusion_matrices[["aic_oversample"]] = confusion_matrix_aic_oversample
 
 rm(aic_model_backward_oversample)
 rm(aic_model_both_oversample)
@@ -1530,9 +1550,23 @@ rm(variable)
 ## LASSO REGULARIZATION
 
 set.seed(1)
-ctrl = 
 
 #### Normal data
+
+# Train the Lasso regression model
+X_train = train_data_scaled
+Y_train = as.numeric(X_train$Churn)
+X_train$Churn = NULL
+fit = glmnet(as.matrix(X_train), Y_train, alpha = 1, lambda = seq(0, 0.15, length = 30))
+
+# Plot coefficient values against the (log-)lambda sequence
+predictor_names = colnames(as.matrix(X_train))
+colors = sample(1:length(predictor_names))
+plot(fit, xvar = "lambda", label = TRUE, col = colors)
+legend("topright", legend = predictor_names, col = colors, lty = 1, cex = 0.5, text.width = 1.2)
+
+str(train_data_scaled)
+sum(is.na(train_data_scaled))
 
 # Train the Lasso regression model with hyperparameter tuning (lamda) and cross validation
 model_lasso = train(Churn ~ ., 
@@ -1545,62 +1579,105 @@ model_lasso = train(Churn ~ .,
 # Plot accuracy values against the lambda sequence
 plot(model_lasso,
      label = T, 
-     xvar = "lambda",
-     yvar = )
-
-# Plot the coefficients
-fit = glmnet(x, y, alpha = 1, lambda = seq(0, 0.15, length = 30))
-plot(fit, xvar = "lambda", label = TRUE)
-
+     xvar = "lambda")
 
 # Retrieve the maximum accuracy and best tuning parameters 
 # achieved during cross-validation
-best_accuracy_lasso = max(lasso_model$results$Accuracy)
-best_parameters_lasso = lasso_model$bestTune
+best_accuracy_lasso = max(model_lasso$results$Accuracy)
+best_parameters_lasso = model_lasso$bestTune$lambda
+cat("The highest value of accuracy:", best_accuracy_lasso, "is obtianed with lambda =", best_parameters_lasso)
 
 # Computing and storing predictions
-predictions_lasso = predict(lasso_model, test_data_scaled)
+predictions_lasso = predict(model_lasso, test_data_scaled)
 confusion_matrix_lasso = table(predictions_lasso, test_data_scaled$Churn)
 confusion_matrices[["lasso_model"]] = confusion_matrix_lasso
 
+# Dropping useless variables 
+rm(colors)
+rm(predictors_names)
+rm(fit)
+rm(best_accuracy_lasso)
+rm(best_parameters_lasso)
+
 #### Undersample
 
-# Train the Lasso regression model 
-lasso_model_undersample = train(Churn ~ ., 
+# Train the Lasso regression model on the undersampled data
+X_train_undersample = train_data_scaled_undersample
+Y_train_undersample = as.numeric(train_data_scaled_undersample$Churn)
+X_train_undersample$Churn = NULL
+fit_undersample = glmnet(as.matrix(X_train_undersample), Y_train_undersample, alpha = 1, lambda = seq(0, 0.15, length = 30))
+
+# Plot coefficient values against the (log-)lambda sequence
+predictor_names_undersample = colnames(as.matrix(X_train_undersample))
+colors_undersample = 1:length(predictor_names_undersample)
+plot(fit_undersample, xvar = "lambda", label = TRUE, col = colors_undersample)
+legend("topright", legend = predictor_names_undersample, col = colors_undersample, lty = 1, cex = 0.5, text.width = 1.2)
+
+# Train the Lasso regression model on the undersampled data with tuning
+model_lasso_undersample = train(Churn ~ ., 
                                 data = train_data_scaled_undersample, 
                                 method = "glmnet", 
                                 metric = "Accuracy", 
-                                trControl = ctrl, 
+                                trControl = trainControl(method = "cv", number = 10), 
                                 tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+
+# Plot accuracy values against the lambda sequence
+plot(model_lasso_undersample,
+     label = TRUE, 
+     xvar = "lambda")
 
 # Retrieve the maximum accuracy and best tuning parameters 
 # achieved during cross-validation
-max(lasso_model_undersample$results$Accuracy)
-lasso_model_undersample$bestTune
+best_accuracy_lasso_undersample = max(model_lasso_undersample$results$Accuracy)
+best_parameters_lasso_undersample = model_lasso_undersample$bestTune$lambda
+cat("The highest value of accuracy:", best_accuracy_lasso_undersample, "is obtained with lambda =", best_parameters_lasso_undersample, "\n")
 
 # Computing and storing predictions
-predictions_lasso_undersample = predict(lasso_model_undersample, test_data_scaled_undersample)
+predictions_lasso_undersample = predict(model_lasso_undersample, test_data_scaled_undersample)
 confusion_matrix_lasso_undersample = table(predictions_lasso_undersample, test_data_scaled_undersample$Churn)
 confusion_matrices[["lasso_model_undersample"]] = confusion_matrix_lasso_undersample
+print(confusion_matrices[["lasso_model_undersample"]])
+
 
 #### Oversample
 
-# Train the Lasso regression model on the oversampled dataset
-lasso_model_oversample = train(Churn ~ ., 
+# Train the Lasso regression model on the oversampled data
+X_train_oversample = train_data_scaled_oversample
+Y_train_oversample = as.numeric(train_data_scaled_oversample$Churn)
+train_data_scaled_oversample$Churn = NULL
+fit_oversample = glmnet(as.matrix(X_train_oversample), Y_train_oversample, alpha = 1, lambda = seq(0, 0.15, length = 30))
+
+# Plot coefficient values against the (log-)lambda sequence
+predictor_names_oversample = colnames(as.matrix(X_train_oversample))
+colors_oversample = 1:length(predictor_names_oversample)
+plot(fit_oversample, xvar = "lambda", label = TRUE, col = colors_oversample)
+legend("topright", legend = predictor_names_oversample, col = colors_oversample, lty = 1, cex = 0.5, text.width = 1.2)
+
+
+# Train the Lasso regression model on the oversampled data with tuning
+model_lasso_oversample = train(Churn ~ ., 
                                data = train_data_scaled_oversample, 
                                method = "glmnet", 
                                metric = "Accuracy", 
-                               trControl = ctrl, 
+                               trControl = trainControl(method = "cv", number = 10), 
                                tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
 
-# Retrieve the maximum accuracy achieved during cross-validation
-max(lasso_model_oversample$results$Accuracy)
-lasso_model_oversample$bestTune
+# Plot accuracy values against the lambda sequence
+plot(model_lasso_oversample,
+     label = TRUE, 
+     xvar = "lambda")
+
+# Retrieve the maximum accuracy and best tuning parameters 
+# achieved during cross-validation
+best_accuracy_lasso_oversample = max(model_lasso_oversample$results$Accuracy)
+best_parameters_lasso_oversample = model_lasso_oversample$bestTune$lambda
+cat("The highest value of accuracy:", best_accuracy_lasso_oversample, "is obtained with lambda =", best_parameters_lasso_oversample, "\n")
 
 # Computing and storing predictions
-predictions_lasso_oversample = predict(lasso_model_oversample, test_data_scaled_oversample)
+predictions_lasso_oversample = predict(model_lasso_oversample, test_data_scaled_oversample)
 confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_data_scaled_oversample$Churn)
 confusion_matrices[["lasso_model_oversample"]] = confusion_matrix_lasso_oversample
+
 
 
 ## RIDGE REGRESSION
@@ -1633,41 +1710,238 @@ ridge.plot
 #### Normal Data
 
 set.seed(1)
-random_forest_model = randomForest(Churn ~ ., data = train_data_oversample, 
+random_forest_model = randomForest(Churn ~ ., data = train_data, 
                                    mtry = 5, 
                                    ntree = 500, 
-                                   importance = T) 
+                                   importance = T)
+print(random_forest_model)
 importance(random_forest_model)
 
+# Storing the error rate matrix. The error rate matrix computes the error rate on the OOB, also 
+# with respect to the two classes.
+error_rate_matrix = random_forest_model$err.rate
+# The information is stored in a matrix to enable the data to be plotted
+error_rate_matrix = data.frame(
+  Trees = rep(1:nrow(error_rate_matrix), times = 3),
+  Type = rep(c("OOB", "False", "True"), each = nrow(error_rate_matrix)),
+  Error = c(error_rate_matrix[, "OOB"],
+            error_rate_matrix[, "False"],
+            error_rate_matrix[, "True"])
+)
+# Printing the result
+ggplot(data = error_rate_matrix, aes(x = Trees, y = Error)) +
+  geom_line(aes(color = Type))
+
+# Visualizing feature importance
+varImpPlot(random_forest_model)
 
 
-varImpPlot(fit_bag)
-
-
-validation.preds = predict(fit_bag, newdata = test_data)
-confusion_matrix_random_forest = table(validation.preds, test_data$Churn)
-print(confusion_matrix_random_forest)
-
-#### Hyperparameter tuning
+##### Hyper parameter tuning
 
 # Train the model using cross-validation and grid search
-rf_random_search = train(Churn ~ ., data = train_data, 
+rf_grid_search = train(Churn ~ ., data = train_data, 
                        method = "rf", 
                        metric = "Accuracy", 
-                       tuneGrid = expand.grid(mtry = c(2, 4, 6, 8, 10, 12)), 
+                       tuneGrid = expand.grid(mtry = c(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)), 
                        trControl = trainControl(method = "cv", number = 5)
                        )
-print(rf_random_search)
-
-
-
+best_mtry = rf_random_search$bestTune$mtry
+cat("The optimal value (in terms of accuracy) for mtry is:", best_mtry)
 
 # Make predictions on the test set using the best model
-prediction = predict(rf_gridsearch, newdata = test_data)
-
+prediction = predict(rf_random_search, newdata = test_data)
 # Confusion matrix
-confusion_matrix_random_forest = table(validation.preds, test_data$Churn)
-print(confusion_matrix_random_forest)
+confusion_matrix_random_forest = table(prediction, test_data$Churn)
+
+confusion_matrices[["random_forest"]] = confusion_matrix_random_forest
+
+#### Undersample data
+
+# Assuming `train_data_undersample` is your undersampled dataset
+
+set.seed(1)
+random_forest_model_undersample = randomForest(Churn ~ ., data = train_data_undersample, 
+                                               mtry = 5, 
+                                               ntree = 500, 
+                                               importance = T)
+print(random_forest_model_undersample)
+importance(random_forest_model_undersample)
+
+# Storing the error rate matrix
+error_rate_matrix_undersample = random_forest_model_undersample$err.rate
+
+# Creating the error rate data frame for plotting
+error_rate_matrix_undersample = data.frame(
+  Trees = rep(1:nrow(error_rate_matrix_undersample), times = 3),
+  Type = rep(c("OOB", "False", "True"), each = nrow(error_rate_matrix_undersample)),
+  Error = c(error_rate_matrix_undersample[, "OOB"],
+            error_rate_matrix_undersample[, "False"],
+            error_rate_matrix_undersample[, "True"])
+)
+
+# Plotting the error rate
+ggplot(data = error_rate_matrix_undersample, aes(x = Trees, y = Error)) +
+  geom_line(aes(color = Type))
+
+# Visualizing feature importance
+varImpPlot(random_forest_model_undersample)
+
+##### Hyperparameter Tuning (Undersample)
+
+# Train the model using cross-validation and grid search
+rf_grid_search_undersample = train(Churn ~ ., data = train_data_undersample, 
+                                   method = "rf", 
+                                   metric = "Accuracy", 
+                                   tuneGrid = expand.grid(mtry = c(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)), 
+                                   trControl = trainControl(method = "cv", number = 5)
+)
+best_mtry_undersample = rf_grid_search_undersample$bestTune$mtry
+cat("The optimal value (in terms of accuracy) for mtry (undersample) is:", best_mtry_undersample)
+
+# Make predictions on the test set using the best model
+prediction_undersample = predict(rf_grid_search_undersample, newdata = test_data)
+# Confusion matrix
+confusion_matrix_random_forest_undersample = table(prediction_undersample, test_data$Churn)
+
+confusion_matrices[["random_forest_undersample"]] = confusion_matrix_random_forest_undersample
+
+#### Oversample data
+
+# Assuming `train_data_oversample` is your oversampled dataset
+
+set.seed(1)
+random_forest_model_oversample = randomForest(Churn ~ ., data = train_data_oversample, 
+                                              mtry = 5, 
+                                              ntree = 500, 
+                                              importance = T)
+print(random_forest_model_oversample)
+importance(random_forest_model_oversample)
+
+# Storing the error rate matrix
+error_rate_matrix_oversample = random_forest_model_oversample$err.rate
+
+# Creating the error rate data frame for plotting
+error_rate_matrix_oversample = data.frame(
+  Trees = rep(1:nrow(error_rate_matrix_oversample), times = 3),
+  Type = rep(c("OOB", "False", "True"), each = nrow(error_rate_matrix_oversample)),
+  Error = c(error_rate_matrix_oversample[, "OOB"],
+            error_rate_matrix_oversample[, "False"],
+            error_rate_matrix_oversample[, "True"])
+)
+
+# Plotting the error rate
+ggplot(data = error_rate_matrix_oversample, aes(x = Trees, y = Error)) +
+  geom_line(aes(color = Type))
+
+# Visualizing feature importance
+varImpPlot(random_forest_model_oversample)
+
+##### Hyperparameter Tuning (Oversample)
+
+# Train the model using cross-validation and grid search
+rf_grid_search_oversample = train(Churn ~ ., data = train_data_oversample, 
+                                  method = "rf", 
+                                  metric = "Accuracy", 
+                                  tuneGrid = expand.grid(mtry = c(5)), 
+                                  trControl = trainControl(method = "cv", number = 5)
+)
+best_mtry_oversample = rf_grid_search_oversample$bestTune$mtry
+cat("The optimal value (in terms of accuracy) for mtry (oversample) is:", best_mtry_oversample)
+
+# Make predictions on the test set using the best model
+prediction_oversample = predict(rf_grid_search_oversample, newdata = test_data)
+# Confusion matrix
+confusion_matrix_random_forest_oversample = table(prediction_oversample, test_data$Churn)
+
+confusion_matrices[["random_forest_oversample"]] = confusion_matrix_random_forest_oversample
+
+## XGBoosting
+
+X_train = model.matrix(Churn ~ ., data = train_data_oversample)[, -1]
+Y_train = as.numeric(train_data_oversample$Churn)-1
+X_test = model.matrix(Churn ~ ., data = test_data)[, -1]
+Y_test = as.numeric(test_data$Churn)-1
+
+fit.xg = xgboost(as.matrix(X_train), label = Y_train, 
+                 nrounds = 50, 
+                 objective = "binary:logistic", 
+                 eval_metric = "error")
+xg.pred <- ifelse(predict(fit.xg, X_test)> 0.5, 1, 0)
+mean(xg.pred != Y_test)
+
+print(table(xg.pred, test_data$Churn))
+get.metrics(table(xg.pred, test_data$Churn))
+
+# Monitor performance on validation/test set
+train_errors <- fit.xg$evaluation_log$train_error
+val_errors <- numeric(50)
+
+for (j in 1:50) {
+  pred_j <- ifelse(predict(fit.xg, X_test, ntreelimit = j) > 0.5, 1, 0)
+  val_errors[j] <- mean(pred_j != Y_test)
+}
+
+# Plot the error rates
+plot(1:50, val_errors, type = "b", xlab = "Number of trees", ylab = "Error", col = 3, ylim = c(0, 0.3), cex = 0.5)
+points(1:50, train_errors, type = "b", cex = 0.5)
+legend("topright", legend = c("Train", "Test"), col = c(1, 3), lty = 1, lwd = 2, cex = 0.7)
+
+# Identify the number of trees with the minimum validation error
+optimal_trees <- which.min(val_errors)
+abline(v = optimal_trees, col = "red")
+
+# Print optimal number of trees
+print(paste("Optimal number of trees:", optimal_trees))
+
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 10,
+  search = "random"
+)
+
+# Parallel processing setup
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+tune_grid <- expand.grid(
+  nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+  eta = 0.3,
+  max_depth = 5,
+  subsample = 1,
+  colsample_bytree = 1,
+  min_child_weight = 5,
+  gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+)
+
+set.seed(1)
+fit_xg_cv <- train(
+  Churn ~ ., data = train_data_oversample, 
+  method = "xgbTree", 
+  trControl = fitControl,
+  verbose = FALSE, 
+  tuneGrid = tune_grid,
+  objective = "binary:logistic", 
+  eval_metric = "error"
+)
+
+# Stop parallel processing
+stopCluster(cl)
+
+# Plot the cross-validation results
+trellis.par.set(caretTheme())
+plot(fit_xg_cv)
+
+# Predictions on the test set using the best model
+pred_xg_cv <- predict(fit_xg_cv, test_data, type = "raw")
+
+# Compute the confusion matrix
+confusion_matrix <- table(pred_xg_cv, test_data$Churn)
+print(confusion_matrix)
+
+# Calculate the mean error
+mean_error <- mean(pred_xg_cv != test_data$Churn)
+print(paste("Mean error rate:", mean_error))
 
 
 
