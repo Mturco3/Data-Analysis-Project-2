@@ -188,11 +188,15 @@ for (variable in categorical_variables) {
 # Displaying plots
 grid.arrange(
   arrangeGrob(grobs = plot_list, nrow = 2, ncol = 2),
-  top = textGrob("Categorical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+  top = textGrob("Categorical Variables Distribution", 
+                 gp = gpar(fontsize = 20, fontface = "bold"),
+                 just = "center")
 )
 grid.arrange(
   arrangeGrob(grobs = plot_list_relationship, nrow = 1, ncol = 3),
-  top = textGrob("Churn Distribution Across Categorical Variables", gp = gpar(fontsize = 20, fontface = "bold")),
+  top = textGrob("Churn Distribution Across Categorical Variables", 
+                 gp = gpar(fontsize = 20, fontface = "bold"),
+                 just = "center"),
   right = legend,
   left = "Count"
 )
@@ -205,6 +209,17 @@ rm(plot)
 rm(plot_relationship)
 rm(variable)
 rm(count_df)
+
+### CHI SQUARED TEST INTERNATIONAL PLAN
+
+# Create a contingency table and perform the chi-squared test. Then we report the results
+contingency_table = table(Data$State, Data$Churn)
+chi_squared_test = chisq.test(contingency_table)
+print(chi_squared_test)
+
+# Removing useless data and variables
+rm(chi_squared_test)
+rm(contingency_table)
 
 ## CHURN VS STATE
 
@@ -238,7 +253,7 @@ Data$ChurnNumeric = NULL
 rm(states)
 rm(churn_rate_states)
 
-### CHI SQUARED TEST
+### CHI SQUARED TEST STATE
 
 # Create a contingency table and perform the chi-squared test. Then we report the results
 contingency_table = table(Data$State, Data$Churn)
@@ -453,9 +468,8 @@ rm(duplicates)
 ### DEALING WITH MISSING VALUES
 
 #Renaming missing values with NA notation, and counting how many rows contain missing values, then printing result
-Data[Data == 'Unknown'] <- NA
-na_counts_per_row <- rowSums(is.na(Data))
-rows_with_na <- sum(na_counts_per_row > 0)
+na_counts_per_row = rowSums(is.na(Data))
+rows_with_na = sum(na_counts_per_row > 0)
 cat("Rows with NA before preprocessing:", rows_with_na, "\n")
 
 # No need to deal with missing values
@@ -1594,22 +1608,23 @@ confusion_matrices[["lasso_model"]] = confusion_matrix_lasso
 
 # Dropping useless variables 
 rm(colors)
-rm(predictors_names)
+rm(predictor_names)
 rm(fit)
 rm(best_accuracy_lasso)
 rm(best_parameters_lasso)
+rm(predictions_lasso)
 
 #### Undersample
 
 # Train the Lasso regression model on the undersampled data
 X_train_undersample = train_data_scaled_undersample
-Y_train_undersample = as.numeric(train_data_scaled_undersample$Churn)
+Y_train_undersample = as.numeric(X_train_undersample$Churn)
 X_train_undersample$Churn = NULL
 fit_undersample = glmnet(as.matrix(X_train_undersample), Y_train_undersample, alpha = 1, lambda = seq(0, 0.15, length = 30))
 
 # Plot coefficient values against the (log-)lambda sequence
 predictor_names_undersample = colnames(as.matrix(X_train_undersample))
-colors_undersample = 1:length(predictor_names_undersample)
+colors_undersample = sample(1:length(predictor_names_undersample))
 plot(fit_undersample, xvar = "lambda", label = TRUE, col = colors_undersample)
 legend("topright", legend = predictor_names_undersample, col = colors_undersample, lty = 1, cex = 0.5, text.width = 1.2)
 
@@ -1638,18 +1653,26 @@ confusion_matrix_lasso_undersample = table(predictions_lasso_undersample, test_d
 confusion_matrices[["lasso_model_undersample"]] = confusion_matrix_lasso_undersample
 print(confusion_matrices[["lasso_model_undersample"]])
 
+# Clean up variables
+rm(colors_undersample)
+rm(predictor_names_undersample)
+rm(fit_undersample)
+rm(best_accuracy_lasso_undersample)
+rm(best_parameters_lasso_undersample)
+rm(predictions_lasso_undersample)
+
 
 #### Oversample
 
 # Train the Lasso regression model on the oversampled data
 X_train_oversample = train_data_scaled_oversample
-Y_train_oversample = as.numeric(train_data_scaled_oversample$Churn)
-train_data_scaled_oversample$Churn = NULL
+Y_train_oversample = as.numeric(X_train_oversample$Churn)
+X_train_oversample$Churn = NULL
 fit_oversample = glmnet(as.matrix(X_train_oversample), Y_train_oversample, alpha = 1, lambda = seq(0, 0.15, length = 30))
 
 # Plot coefficient values against the (log-)lambda sequence
 predictor_names_oversample = colnames(as.matrix(X_train_oversample))
-colors_oversample = 1:length(predictor_names_oversample)
+colors_oversample = sample(1:length(predictor_names_oversample))
 plot(fit_oversample, xvar = "lambda", label = TRUE, col = colors_oversample)
 legend("topright", legend = predictor_names_oversample, col = colors_oversample, lty = 1, cex = 0.5, text.width = 1.2)
 
@@ -1678,17 +1701,23 @@ predictions_lasso_oversample = predict(model_lasso_oversample, test_data_scaled_
 confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_data_scaled_oversample$Churn)
 confusion_matrices[["lasso_model_oversample"]] = confusion_matrix_lasso_oversample
 
-
+rm(colors_oversample)
+rm(predictor_names_oversample)
+rm(fit_oversample)
+rm(best_accuracy_lasso_oversample)
+rm(best_parameters_lasso_oversample)
+rm(predictions_lasso_oversample)
 
 ## RIDGE REGRESSION
 
 set.seed(1)
-ctrl = trainControl(method = "cv", number = 10)
-ridge = train(Churn ~ ., 
+
+model_ridge = train(Churn ~ ., 
               data = train_data_scaled, 
               method = "glmnet", 
               metric = "Accuracy", 
-              trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+              trControl = trainControl(method = "cv", number = 10), 
+              tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
 max(ridge$results$Accuracy)
 ridge$bestTune
 
@@ -1857,23 +1886,22 @@ confusion_matrices[["random_forest_oversample"]] = confusion_matrix_random_fores
 
 ## XGBoosting
 
-X_train = model.matrix(Churn ~ ., data = train_data_oversample)[, -1]
-Y_train = as.numeric(train_data_oversample$Churn)-1
-X_test = model.matrix(Churn ~ ., data = test_data)[, -1]
-Y_test = as.numeric(test_data$Churn)-1
-
-fit.xg = xgboost(as.matrix(X_train), label = Y_train, 
+# In the first place we train the algorithm without tuning
+model_xg = xgboost(as.matrix(X_train), label = Y_train, 
                  nrounds = 50, 
                  objective = "binary:logistic", 
                  eval_metric = "error")
+
+# We then consider its performance
 xg.pred <- ifelse(predict(fit.xg, X_test)> 0.5, 1, 0)
 mean(xg.pred != Y_test)
-
 print(table(xg.pred, test_data$Churn))
 get.metrics(table(xg.pred, test_data$Churn))
 
-# Monitor performance on validation/test set
-train_errors <- fit.xg$evaluation_log$train_error
+# Just to get an insight on the relevance of the parameter ntreelimit, we consider the error
+# on the test set. It is important to state that this is not a process to train the model but just
+# an analysis on the parameter since models cannot be trained on the test set
+train_errors = fit.xg$evaluation_log$train_error
 val_errors <- numeric(50)
 
 for (j in 1:50) {
@@ -1943,5 +1971,72 @@ print(confusion_matrix)
 mean_error <- mean(pred_xg_cv != test_data$Churn)
 print(paste("Mean error rate:", mean_error))
 
+library(randomForest)
+library(dplyr)
+
+# -------------------------
+
+# Create a random sample of hyperparameter combinations
+set.seed(123)
+hyperparameter_grid <- expand.grid(
+  n_tree = c(400,450,500,550,600),
+  m_try = 1:12,
+  max_nodes = c(10, 25, 50, 75, 100, 200, 300),
+  node_size = 1:10
+)
+
+# Sample a smaller grid for random search
+sampled_grid = hyperparameter_grid %>% sample_n(50)
+
+
+# Evaluate all combinations
+results_random_forest_tuning = data.frame()
+for (i in 1:nrow(sampled_grid)) {
+  params = sampled_grid[i, ]
+  print(params)
+  rf_model = randomForest(
+    Churn ~ .,
+    data = train_data_oversample,
+    ntree = params$n_tree,
+    mtry = params$m_try,
+    maxnodes = params$max_nodes,
+    nodesize = params$node_size,
+    importance = TRUE
+  )
+  # Appending the results in the dataframe
+  print(mean(rf_model$err.rate[, 1]))
+  results_random_forest_tuning = rbind(results_random_forest_tuning,
+                                       cbind(params, mean(rf_model$err.rate[, 1])))
+}
+
+# Find the best parameters
+best_parameters = results %>%
+  filter(oob_error == min(oob_error)) %>%
+  slice(1)
+
+# Retrieving best combination of parameters
+best_parameters_random_forest = results[1, ]
+print(best_parameters_random_forest)
+
+
+# Train the final model with the best parameters
+final_rf_model <- randomForest(
+  Churn ~ .,
+  data = train_data_oversample,
+  ntree = best_parameters_random_forest$n_tree,
+  mtry = best_parameters_random_forest$m_try,
+  nodesize = best_parameters_random_forest$node_size,
+  maxnodes = best_parameters_random_forest$max_nodes,
+  importance = TRUE
+)
+
+# Make predictions on the test set
+pred_rf = predict(final_rf_model, test_data)
+confusion_matrix_rf = table(pred_rf, test_data$Churn)
+print(confusion_matrix_rf)
+
+# Calculate and print the mean error
+mean_error_rf <- mean(pred_rf != test_data$Churn)
+print(paste("Mean error rate:", mean_error_rf))
 
 

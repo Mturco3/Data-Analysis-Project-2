@@ -1,0 +1,292 @@
+---
+title: "Final Project Data Analysis for Business -"
+output:
+  html_document: default
+---
+
+```{r r message=FALSE, warning=FALSE, include=FALSE}
+# Importing libraries
+
+library(ggplot2)
+library(dplyr)
+library(skimr)
+library(readr)
+library(sf)
+library(usmap)
+library(grid)
+library(gridExtra)
+library(corrplot)
+library(caret)
+library(ROSE)
+library(latex2exp)
+library(glmnet)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(doParallel)
+
+```
+
+# STATBIZ
+
+Group members:
+
+-   Michele Turco (285251)
+-   Giulio Presaghi
+-   Edoardo Brown
+-   Irene Benvenuti
+
+## GOAL OF THE ANALYSIS
+
+## DATASET DESCRIPTION
+
+### Importing the dataset
+
+The dataset consists of 3333 observations with 20 variables related to telecom customer attributes, such as state, account length, service usage details, and whether the customer churned or not. In particular, we can see that there are 15 numerical variables and 5 categorical variables.
+
+```{r}
+# Importing Dataset
+Data = read.csv2("./Dataset/TelecomChurn.csv", 
+                 header = T, 
+                 sep = ",", 
+                 colClasses = "character")
+variables = colnames(Data)
+categorical_variables = c("State", "International.plan", "Voice.mail.plan", "Area.code")
+target_variable = "Churn"
+numerical_variables = setdiff(variables, c(categorical_variables, target_variable))
+predictors = setdiff(variables, target_variable)
+
+# Ensuring that variables are converted in the correct form
+Data[[target_variable]] = as.factor(Data[[target_variable]])
+for (var in numerical_variables) {
+  Data[[var]] = as.numeric(Data[[var]])
+}
+for (var in categorical_variables) {
+  Data[[var]] = as.factor(Data[[var]])
+}
+
+# Showing the results
+str(Data)
+```
+
+### Cleaning the dataset
+
+The dataset does not contain any missing value and hence this is not an issue that need to be addressed.
+
+```{r}
+
+#Renaming missing values with NA notation, and counting how many rows contain missing values, then printing result
+na_counts_per_row = rowSums(is.na(Data))
+rows_with_na = sum(na_counts_per_row > 0)
+cat("Rows with NA before preprocessing:", rows_with_na, "\n")
+
+```
+
+In addittion, the dataset does not present any duplicated value and consequently the issue does not need to be addressed.
+
+```{r}
+# Counting duplicates row and printing the result
+duplicates = sum(duplicated(Data))
+print(paste("There are", duplicates, "duplicates rows in the Dataset"))
+```
+
+## EDA
+
+Exploratory Data Analysis (EDA) is a crucial step in understanding the underlying patterns and relationships within the dataset. Through this analysis, we aim to gain insights that will inform the subsequent steps of data preprocessing and model building.
+
+### Target variable distribution
+
+We first consider our target variable "Churn" and its distribution. To do this, we will plot both a histogram to visualize the number of observations for each class and a pie chart to better understand their proportions in the dataset.
+
+```{r}
+
+# Computing churn count and proportion
+churn_distribution = Data %>%
+  count(Churn, name = "Count")
+churn_distribution$proportion = churn_distribution$Count/sum(churn_distribution$Count)
+
+# Creating histogram with ggplot library
+histogram_plot = ggplot(Data, aes(x = Churn, fill = Churn)) + 
+  geom_bar(color = "black", alpha = 0.7) +
+  geom_text(stat='count', aes(label=after_stat(count)), vjust= 2) + 
+  ggtitle("Churn Count") + 
+  scale_fill_manual(values = c("red", "blue")) + 
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 10),
+    legend.position = "none",
+  )
+
+# Creating pie histogram plot with ggplot library
+piechart_plot = ggplot(data = churn_distribution, aes(x = "", y = proportion, fill = Churn)) + 
+  geom_bar(stat = "identity", color = "black", alpha = 0.7) +
+  coord_polar("y") +
+  theme_minimal() + 
+  geom_text(aes(label = paste0(round(proportion * 100, 0), "%")), 
+            position = position_stack(vjust = 0.5)) + 
+  labs(x = NULL, y = NULL, fill = NULL, 
+       title = paste("Churn Proportion")) + 
+  scale_fill_manual(values = c("red", "blue", "green")) +
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 12),
+        panel.grid = element_blank())
+
+# Representing the plots
+
+grid.arrange(
+  arrangeGrob(histogram_plot, piechart_plot, nrow = 1, ncol = 2),
+  top = textGrob("Target Variable Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+)
+
+```
+
+The histogram on the left shows that there are 2850 customers who did not churn (False) and 483 customers who did churn (True). The pie chart on the right indicates that 86% of customers did not churn, while 14% did churn. This highlights an significance imbalance in the dataset, with an higher number of customers not churning compared to those who do.
+
+### Categorical Variables distribution
+
+In order to get more insightful results in the analysis of the distribution of categorical variables, we firstly plot the proportion of each class in a pie chart (as we did before with our target variable).
+
+```{r}
+# Code used in order to generate the plots
+
+plot_list = list()
+plot_list_relationship = list()
+
+# Loop through the categorical variables to create individual plots
+for (variable in categorical_variables) {
+  if (variable == "State") {
+    next
+  }
+  
+  # Creating histograms
+  plot_relationship = ggplot(Data, aes_string(x = variable, fill = "Churn")) + 
+    geom_bar(position = "dodge", color = "black", alpha = 0.7) + 
+    scale_fill_manual(values = c("blue", "red")) + 
+    geom_text(stat = 'count', aes(label = after_stat(count)), position = position_dodge(width = 1), vjust = -0.4) +
+    xlab(variable) +
+    ylim(0, 2700) +
+    ylab("Count") + 
+    theme_minimal() + 
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.x = element_text(size = 10),
+      axis.text.y = element_text(size = 10),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 12),
+      legend.position = "none"
+    )
+  
+  # Storing the legend separately for histograms (we want to represent only one in the final plot)
+  get_legend <- function(myplot) {
+    tmp <- ggplot_gtable(ggplot_build(myplot))
+    leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+    legend <- tmp$grobs[[leg]]
+    return(legend)
+  }
+  legend = get_legend(ggplot(Data, aes_string(x = categorical_variables[1], fill = "Churn")) + 
+                         geom_bar(position = "dodge", color = "black", alpha = 0.7) + 
+                         scale_fill_manual(values = c("blue", "red")) + 
+                         theme_minimal() + 
+                         theme(legend.title = element_text(size = 14),
+                               legend.text = element_text(size = 12)))
+  
+  # Computing proportions for categorical variables
+  count_df = Data %>%
+    count(!!sym(variable), name = "Count")
+  count_df$proportion = count_df$Count/sum(count_df$Count)
+ 
+  # Creating pie charts
+  plot = ggplot(data = count_df, aes(x = "", y = proportion, fill = !!sym(variable))) + 
+    geom_bar(width = 1, stat = "identity", color = "black", alpha = 0.7) + 
+    theme_classic() + 
+    coord_polar("y") +
+    geom_text(aes(label = paste0(round(proportion * 100, 0), "%")), 
+              position = position_stack(vjust = 0.7)) + 
+    labs(x = NULL, y = NULL, fill = NULL, 
+         title = paste("Distribution of", variable)) + 
+    guides(fill = guide_legend(reverse = TRUE)) + 
+    scale_fill_manual(values = c("red", "blue", "green")) + 
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          plot.title = element_text(hjust = 0.5))
+  
+
+  # Adding the plots to the list
+  plot_list_relationship[[variable]] = plot_relationship
+  plot_list[[variable]] = plot
+}
+
+```
+
+```{r}
+# Display the first plot
+grid.arrange(
+  arrangeGrob(grobs = plot_list, nrow = 2, ncol = 2),
+  top = textGrob("Categorical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+)
+```
+The pie chart shows that 90% of the customers do not have an international plan, while only 10% have opted for one. This indicates that the majority of customers do not use international calling services.
+In addition, 72% of the customers do not have a voice mail plan, whereas 28% have subscribed to this service. This suggests that a significant portion of the customer base does not utilize voice mail services.
+The pie chart shows also the distribution of customers across three area codes: 408, 415, and 510. The distribution is relatively balanced, with 50% of customers having area code 415, and the remaining 50% evenly split between area codes 408 and 510 (25% each). This indicates that the customer base is fairly evenly distributed across these three regions.
+
+Furthermore, we wanted to highlight the distribution of customer churn across the three categorical variables with an histogram in which the bars represent the counts of customers who churned (True) and did not churn (False) for each category.
+
+```{r}
+grid.arrange(
+  arrangeGrob(grobs = plot_list_relationship, nrow = 1, ncol = 3),
+  top = textGrob("Churn Distribution Across Categorical Variables", gp = gpar(fontsize = 20, fontface = "bold"), just = "center"),
+  right = legend,
+  left = "Count"
+)
+```
+The majority of customers without an international plan (2664) did not churn, whereas 346 customers did churn. For customers with an international plan, there are 186 non-churners compared to 137 churners.
+Among customers without a voice mail plan, 2008 did not churn, while 403 churned.
+For customers with a voice mail plan, 842 did not churn and 80 churned.
+The churn distribution is somewhat balanced across area codes, with 408 and 510 having slightly higher churn rates (122 and 125 churners respectively) compared to area code 415 (236 churners).
+The number of non-churners is highest in area code 415 (1419) compared to 408 (716) and 510 (715).
+What is particularly interesting is that the proportion of churn is higher among customers with an international plan compared to those without. In fact, almost half of the customers who were subscribed to the International plan have churned, suggesting that this factor may heavily influence customer decisions. However, to draw any definitive conclusions, we need to perform a more in-depth analysis.
+
+##### Chi-Square Test with International Plan and Churn
+
+
+
+#### State variable
+
+Due to its particularly high number of levels (51), we decided to analyze this variable differently from other categorical variables. A "classic" plot would not have been as insightful. Therefore, we plotted the churn rate across USA states directly on a map, (after ensuring rthat observations were balanced between states). This approach provides a clearer understanding of whether the variable distribution varies by state.
+
+```{r}
+Data$ChurnNumeric = ifelse(Data$Churn == "True", 1, 0)
+
+churn_rate_states = Data %>%
+  group_by(State) %>%
+  summarize(ChurnRate = mean(ChurnNumeric))
+
+states = statepop
+names(states)[names(states) == "abbr"] <- "State"
+churn_rate_states = merge(states, churn_rate_states, by = "State", all.x = TRUE)
+
+plot_usmap(data = churn_rate_states, values = "ChurnRate", labels = TRUE) +
+  scale_fill_gradient(low = "lightblue",
+                      high = "red",
+                      name = NULL) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.key.width = unit(0.8, "in"),
+        plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Churn Rate Across US States")
+
+# Dropping variables since it is now useless
+Data$ChurnNumeric = NULL
+```
+The plot indicates that the churn rate distribution does vary significantly across states.
+For example, California (CA) and Texas (TX) exhibit higher churn rates, indicated by the deep red shading (25%, as shown in the legend), suggesting that a substantial proportion of customers in these states are leaving the service. In contrast, states like Alaska (AK) and Iowa (IA), shaded in blue, have much lower churn rates (<10%), indicating better customer retention.
