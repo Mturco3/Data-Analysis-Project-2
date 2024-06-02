@@ -213,7 +213,7 @@ rm(count_df)
 ### CHI SQUARED TEST INTERNATIONAL PLAN
 
 # Create a contingency table and perform the chi-squared test. Then we report the results
-contingency_table = table(Data$State, Data$Churn)
+contingency_table = table(Data$International.plan, Data$Churn)
 chi_squared_test = chisq.test(contingency_table)
 print(chi_squared_test)
 
@@ -282,13 +282,15 @@ plot_list_numerical = list()
 for (variable in numerical_variables) {
   # Setting appropriate bin width
   binwidth = ceiling(max(Data[[variable]], na.rm = TRUE)/10)
+  # Removing points from the variables names
+  name = gsub("\\.", " ", variable)
   
   # Creating histograms
   plot_numerical = ggplot(Data, aes_string(x = variable)) + 
     geom_histogram(binwidth = binwidth, color = "black", fill = "grey", alpha = 0.7) + 
     geom_vline(aes_string(xintercept = means_vec[variable]), color = "blue", linetype = "dashed", size = 1) + 
     geom_vline(aes_string(xintercept = median_vec[variable]), color = "red", linetype = "dashed", size = 1) + 
-    labs(title = paste("Histogram of", variable), x = variable, y = "Frequency") +
+    labs(title = paste("Histogram of", variable), x = name, y = "Frequency") +
     theme_minimal() + 
     theme(
       plot.title = element_blank(),
@@ -301,7 +303,7 @@ for (variable in numerical_variables) {
   # Creating 
   plot_numerical_relationship = ggplot(Data, aes_string(x = variable, fill = "Churn")) +
     geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
-    labs(title = variable) +
+    labs(title = name, x = name) +
     theme_minimal() +
     theme(
       plot.title = element_blank(),
@@ -315,7 +317,7 @@ for (variable in numerical_variables) {
   # Storing legend
   legend = get_legend(ggplot(Data, aes_string(x = variable, fill = "Churn")) +
                         geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
-                        labs(title = variable) +
+                        labs(title = variable, x = name) +
                         theme_minimal() +
                         theme(legend.title = element_text(size = 14),
                               legend.text = element_text(size = 12),
@@ -426,6 +428,10 @@ corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
          addgrid.col = "grey",
          tl.cex = 0.8,
          col = colorRampPalette(c("red", "white", "blue"))(200))
+
+# Showing why the two are highly correlated
+print(unique(round(Data$Total.day.charge/Data$Total.day.minutes,2)))
+
 
 
 ### CORRELATION WITH TARGET VARIABLE
@@ -1010,8 +1016,8 @@ rm(confusion_matrix_tree_oversample)
 get.metrics<- function(conf.mat) {
   true.positives <- conf.mat[2,2]
   true.negatives <- conf.mat[1,1]
-  false.positives <- conf.mat[1,2]
-  false.negatives <- conf.mat[2,1]
+  false.positives <- conf.mat[2,1]
+  false.negatives <- conf.mat[1,2]
   num.observations <- true.positives + true.negatives + false.positives + false.negatives
   
   accuracy <- (true.positives + true.negatives) / num.observations
@@ -1545,6 +1551,7 @@ if (selected_model_name_bic_oversample == "forward") {
 # Computing and storing predictions on the validation data
 bic_model_predictions_oversample = ifelse(predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
 confusion_matrix_bic_oversample = table(bic_model_predictions_oversample, test_data_scaled_oversample$Churn)
+print(confusion_matrix_bic_oversample)
 confusion_matrices[["bic_oversample"]] = confusion_matrix_bic_oversample
 
 rm(bic_model_backward_oversample)
@@ -1560,6 +1567,101 @@ rm(num_features_bic_backward_oversample)
 rm(num_features_bic_forward_oversample)
 rm(feature_counts_bic_oversample)
 rm(variable)
+
+## LINEAR MODELS COMPARISSON
+
+### Confusion matrices
+
+# Function to plot confusion matrices 
+
+plot_confusion_matrix <- function(conf_matrix, title) {
+  conf_df <- as.data.frame(as.table(conf_matrix))
+  colnames(conf_df) <- c("Predicted", "Actual", "Freq")
+  
+  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = Freq), vjust = 1) +
+    scale_fill_gradient(low = "white", high = "red") +
+    labs(title = title, x = "Predicted", y = "Actual") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+
+# Create the plots
+baseline_plot = plot_confusion_matrix(confusion_matrix_baseline_logistic_oversample, "Baseline Model")
+aic_plot = plot_confusion_matrix(confusion_matrix_aic_oversample, "AIC Model")
+bic_plot = plot_confusion_matrix(confusion_matrix_bic_oversample, "BIC Model")
+
+# Arrange the plots in a single layout
+grid.arrange(baseline_plot, aic_plot, bic_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+
+### Metrics
+
+# Calculate metrics for each model
+metrics_baseline = get.metrics(confusion_matrix_baseline_logistic_oversample)
+metrics_aic = get.metrics(confusion_matrix_aic_oversample)
+metrics_bic = get.metrics(confusion_matrix_bic_oversample)
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic)
+rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+
+# Print the metrics
+print(metrics_combined)
+
+plot_table = function(df) {
+  
+  table_theme = ttheme_default(
+    core = list(
+      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
+      fg_params = list(fontface = 1, fontsize = 16)
+    ),
+    colhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    ),
+    rowhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    )
+  )
+  table_plot = tableGrob(df, theme = table_theme)
+  return(table_plot)
+}
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,3)) # 3 rows, 1 column layout for confusion matrices
+roc_baseline = roc(test_data$Churn, 
+                   predict(model_baseline_logistic_oversample, 
+                           newdata = test_data_scaled_oversample, 
+                           type = "response"), 
+                   plot = TRUE, main = "Baseline Model", col = "blue", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+                   predict(model_aic_final_oversample, 
+                           newdata = test_data_scaled_oversample, 
+                           type = "response"), 
+                   plot = TRUE, main = "AIC Model", col = "red", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_bic = roc(test_data$Churn, 
+              predict(model_bic_final_oversample, 
+                      newdata = test_data_scaled_oversample, 
+                      type = "response"), 
+              plot = TRUE, main = "BIC Model", col = "green", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+
 
 ## LASSO REGULARIZATION
 
@@ -1710,6 +1812,8 @@ rm(predictions_lasso_oversample)
 
 ## RIDGE REGRESSION
 
+### Normal Data
+
 set.seed(1)
 
 model_ridge = train(Churn ~ ., 
@@ -1718,10 +1822,10 @@ model_ridge = train(Churn ~ .,
               metric = "Accuracy", 
               trControl = trainControl(method = "cv", number = 10), 
               tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
-max(ridge$results$Accuracy)
-ridge$bestTune
+max(model_ridge$results$Accuracy)
+model_ridge$bestTune
 
-ridge.plot = ridge %>% 
+ridge.plot = model_ridge %>% 
   ggplot(aes(x = lambda, y = Accuracy)) + 
   geom_line() + 
   geom_point() +
@@ -1732,6 +1836,9 @@ ridge.plot = ridge %>%
     plot.title = element_text(hjust = 0.5, face = "bold")
   )
 ridge.plot
+
+predictions_rige = predict(model_ridge, test_data_scaled)
+confusion_matrix_ridge = table(predictions_rige, test_data_scaled$Churn)
 
 
 ## RANDOM FORESTS

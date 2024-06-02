@@ -1,10 +1,11 @@
 ---
 title: "Final Project Data Analysis for Business -"
 output:
+  pdf_document: default
   html_document: default
 ---
 
-```{r r message=FALSE, warning=FALSE, include=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 # Importing libraries
 
 library(ggplot2)
@@ -44,7 +45,7 @@ Group members:
 
 The dataset consists of 3333 observations with 20 variables related to telecom customer attributes, such as state, account length, service usage details, and whether the customer churned or not. In particular, we can see that there are 15 numerical variables and 5 categorical variables.
 
-```{r}
+```{r echo=FALSE, warning=FALSE}
 # Importing Dataset
 Data = read.csv2("./Dataset/TelecomChurn.csv", 
                  header = T, 
@@ -73,7 +74,7 @@ str(Data)
 
 The dataset does not contain any missing value and hence this is not an issue that need to be addressed.
 
-```{r}
+```{r echo=FALSE}
 
 #Renaming missing values with NA notation, and counting how many rows contain missing values, then printing result
 na_counts_per_row = rowSums(is.na(Data))
@@ -82,9 +83,9 @@ cat("Rows with NA before preprocessing:", rows_with_na, "\n")
 
 ```
 
-In addittion, the dataset does not present any duplicated value and consequently the issue does not need to be addressed.
+In addition, the dataset does not present any duplicated value and consequently the issue does not need to be addressed.
 
-```{r}
+```{r echo=FALSE}
 # Counting duplicates row and printing the result
 duplicates = sum(duplicated(Data))
 print(paste("There are", duplicates, "duplicates rows in the Dataset"))
@@ -98,7 +99,7 @@ Exploratory Data Analysis (EDA) is a crucial step in understanding the underlyin
 
 We first consider our target variable "Churn" and its distribution. To do this, we will plot both a histogram to visualize the number of observations for each class and a pie chart to better understand their proportions in the dataset.
 
-```{r}
+```{r include=FALSE}
 
 # Computing churn count and proportion
 churn_distribution = Data %>%
@@ -137,6 +138,10 @@ piechart_plot = ggplot(data = churn_distribution, aes(x = "", y = proportion, fi
         plot.title = element_text(hjust = 0.5, size = 12),
         panel.grid = element_blank())
 
+```
+
+```{r echo=FALSE}
+
 # Representing the plots
 
 grid.arrange(
@@ -148,11 +153,11 @@ grid.arrange(
 
 The histogram on the left shows that there are 2850 customers who did not churn (False) and 483 customers who did churn (True). The pie chart on the right indicates that 86% of customers did not churn, while 14% did churn. This highlights an significance imbalance in the dataset, with an higher number of customers not churning compared to those who do.
 
-### Categorical Variables distribution
+### Categorical variables distribution
 
 In order to get more insightful results in the analysis of the distribution of categorical variables, we firstly plot the proportion of each class in a pie chart (as we did before with our target variable).
 
-```{r}
+```{r include=FALSE}
 # Code used in order to generate the plots
 
 plot_list = list()
@@ -227,20 +232,19 @@ for (variable in categorical_variables) {
 
 ```
 
-```{r}
+```{r echo=FALSE}
 # Display the first plot
 grid.arrange(
   arrangeGrob(grobs = plot_list, nrow = 2, ncol = 2),
   top = textGrob("Categorical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
 )
 ```
-The pie chart shows that 90% of the customers do not have an international plan, while only 10% have opted for one. This indicates that the majority of customers do not use international calling services.
-In addition, 72% of the customers do not have a voice mail plan, whereas 28% have subscribed to this service. This suggests that a significant portion of the customer base does not utilize voice mail services.
-The pie chart shows also the distribution of customers across three area codes: 408, 415, and 510. The distribution is relatively balanced, with 50% of customers having area code 415, and the remaining 50% evenly split between area codes 408 and 510 (25% each). This indicates that the customer base is fairly evenly distributed across these three regions.
+
+The pie chart shows that 90% of the customers do not have an international plan, while only 10% have opted for one. This indicates that the majority of customers do not use international calling services. In addition, 72% of the customers do not have a voice mail plan, whereas 28% have subscribed to this service. This suggests that a significant portion of the customer base does not utilize voice mail services. The pie chart shows also the distribution of customers across three area codes: 408, 415, and 510. The distribution is relatively balanced, with 50% of customers having area code 415, and the remaining 50% evenly split between area codes 408 and 510 (25% each). This indicates that the customer base is fairly evenly distributed across these three regions.
 
 Furthermore, we wanted to highlight the distribution of customer churn across the three categorical variables with an histogram in which the bars represent the counts of customers who churned (True) and did not churn (False) for each category.
 
-```{r}
+```{r echo=FALSE}
 grid.arrange(
   arrangeGrob(grobs = plot_list_relationship, nrow = 1, ncol = 3),
   top = textGrob("Churn Distribution Across Categorical Variables", gp = gpar(fontsize = 20, fontface = "bold"), just = "center"),
@@ -248,22 +252,38 @@ grid.arrange(
   left = "Count"
 )
 ```
+
 The majority of customers without an international plan (2664) did not churn, whereas 346 customers did churn. For customers with an international plan, there are 186 non-churners compared to 137 churners.
-Among customers without a voice mail plan, 2008 did not churn, while 403 churned.
-For customers with a voice mail plan, 842 did not churn and 80 churned.
-The churn distribution is somewhat balanced across area codes, with 408 and 510 having slightly higher churn rates (122 and 125 churners respectively) compared to area code 415 (236 churners).
-The number of non-churners is highest in area code 415 (1419) compared to 408 (716) and 510 (715).
+
+Among customers without a voice mail plan, 2008 did not churn, while 403 churned. For customers with a voice mail plan, 842 did not churn and 80 churned.
+
+The churn distribution is somewhat balanced across area codes, with 408 and 510 having slightly higher churn rates (122 and 125 churners respectively) compared to area code 415 (236 churners). The number of non-churners is highest in area code 415 (1419) compared to 408 (716) and 510 (715).
+
 What is particularly interesting is that the proportion of churn is higher among customers with an international plan compared to those without. In fact, almost half of the customers who were subscribed to the International plan have churned, suggesting that this factor may heavily influence customer decisions. However, to draw any definitive conclusions, we need to perform a more in-depth analysis.
 
 ##### Chi-Square Test with International Plan and Churn
 
+To statistically interpret the hypothesis stated above, we performed a Chi-Square Test on the two variables. The Chi-Square test is a statistical method used to determine if there is a significant association between two categorical variables. It compares the observed frequencies in each category to the expected frequencies under the null hypothesis, which posits that the variables are independent.
 
+-   H0 (Null Hypothesis): There is no association between the two categorical variables; they are independent.
+
+-   H1 (Alternative Hypothesis): There is an association between the two categorical variables; they are not independent.
+
+```{r echo=FALSE}
+# Create a contingency table and perform the chi-squared test. Then we report the results
+contingency_table = table(Data$International.plan, Data$Churn)
+chi_squared_test = chisq.test(contingency_table)
+print("Chi Square Test on International Plan and Churn")
+print(chi_squared_test)
+```
+
+X-squared = 222.57 is the test statistic value, which measures the discrepancy between the observed and expected frequencies. The extremely small p-value (\< 2.2e-16) indicates that the probability of observing such a discrepancy by random chance is very low. Since the p-value is much smaller than the conventional significance level (e.g., 0.05), the null hypothesis is rejected, suggesting that there is a statistically significant association between the two categorical variables in the dataset. In other words, the data provides strong evidence that the variables are not independent and that there is a significant relationship between them.
 
 #### State variable
 
 Due to its particularly high number of levels (51), we decided to analyze this variable differently from other categorical variables. A "classic" plot would not have been as insightful. Therefore, we plotted the churn rate across USA states directly on a map, (after ensuring rthat observations were balanced between states). This approach provides a clearer understanding of whether the variable distribution varies by state.
 
-```{r}
+```{r echo=FALSE}
 Data$ChurnNumeric = ifelse(Data$Churn == "True", 1, 0)
 
 churn_rate_states = Data %>%
@@ -288,5 +308,699 @@ plot_usmap(data = churn_rate_states, values = "ChurnRate", labels = TRUE) +
 # Dropping variables since it is now useless
 Data$ChurnNumeric = NULL
 ```
-The plot indicates that the churn rate distribution does vary significantly across states.
-For example, California (CA) and Texas (TX) exhibit higher churn rates, indicated by the deep red shading (25%, as shown in the legend), suggesting that a substantial proportion of customers in these states are leaving the service. In contrast, states like Alaska (AK) and Iowa (IA), shaded in blue, have much lower churn rates (<10%), indicating better customer retention.
+
+The plot indicates that the churn rate distribution does vary significantly across states. For example, California (CA) and Texas (TX) exhibit higher churn rates, indicated by the deep red shading (25%, as shown in the legend), suggesting that a substantial proportion of customers in these states are leaving the service. In contrast, states like Alaska (AK) and Iowa (IA), shaded in blue, have much lower churn rates (\<10%), indicating better customer retention.
+
+##### Chi squared test on State and Churn
+
+We decided to perform the Chi-Square test in order to have a more accurate insight.
+
+```{r echo=FALSE, warning=FALSE}
+# Create a contingency table and perform the chi-squared test. Then we report the results
+contingency_table = table(Data$State, Data$Churn)
+chi_squared_test = chisq.test(contingency_table)
+print("Chi Square Test on State and Churn")
+print(chi_squared_test)
+```
+
+Since the p-value is less than 0.05 also in this case, we reject the null hypothesis (H0) that the two categorical variables are independent. This indicates a significant association between the variables. However, while both tests reject the null hypothesis, the first test shows a more pronounced discrepancy between observed and expected frequencies with a simpler model, while the second test shows a significant association in a more complex scenario, shown by the degrees of freedom df = 50 (higher number of categories for the state variable).
+
+#### Numerical variables
+
+In this section, we perform Exploratory Data Analysis (EDA) on numerical variables to understand their distributions, identify patterns, and detect any anomalies. This analysis will provide key insights and inform subsequent data preprocessing and modeling steps.
+
+```{r include=FALSE, warning=FALSE}
+
+# Code to generate the plots
+Numerical_Data = Data[numerical_variables]
+means_vec = apply(X = Numerical_Data, MARGIN = 2, FUN = mean)
+median_vec = apply(X = Numerical_Data, MARGIN = 2, FUN = median)
+sd_vec = apply(X = Numerical_Data, MARGIN = 2, FUN = sd)
+
+plot_list_numerical_relationship = list()
+plot_list_numerical = list()
+
+# Loop through each numerical variable to create individual histograms
+for (variable in numerical_variables) {
+  # Setting appropriate bin width
+  binwidth = ceiling(max(Data[[variable]], na.rm = TRUE)/10)
+  # Removing points from the variables names
+  name = gsub("\\.", " ", variable)
+  
+  # Creating histograms
+  plot_numerical = ggplot(Data, aes_string(x = variable)) + 
+    geom_histogram(binwidth = binwidth, color = "black", fill = "grey", alpha = 0.7) + 
+    geom_vline(aes_string(xintercept = means_vec[variable]), color = "blue", linetype = "dashed", size = 1) + 
+    geom_vline(aes_string(xintercept = median_vec[variable]), color = "red", linetype = "dashed", size = 1) + 
+    labs(title = paste("Histogram of", variable), x = name, y = "Frequency") +
+    theme_minimal() + 
+    theme(
+      plot.title = element_blank(),
+      axis.title.x = element_text(size = 14),
+      axis.title.y = element_blank(),
+      axis.text.x = element_text(size = 12),
+      axis.text.y = element_text(size = 12)
+    )
+  
+  # Creating 
+  plot_numerical_relationship = ggplot(Data, aes_string(x = variable, fill = "Churn")) +
+    geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
+    labs(title = variable, x = name) +
+    theme_minimal() +
+    theme(
+      plot.title = element_blank(),
+      axis.title.x = element_text(size = 12),
+      axis.title.y = element_blank(),
+      axis.text.x = element_text(size = 10),
+      axis.text.y = element_text(size = 10)
+    ) +
+    scale_fill_manual(name = "Churn", labels = c("No", "Yes"), values = c("blue", "red"))
+  
+  # Storing legend
+  legend = get_legend(ggplot(Data, aes_string(x = variable, fill = "Churn")) +
+                        geom_histogram(position = "identity", alpha = 0.7, binwidth = binwidth) +
+                        labs(title = variable) +
+                        theme_minimal() +
+                        theme(legend.title = element_text(size = 14),
+                              legend.text = element_text(size = 12),
+                              legend.direction = "horizontal") +
+                        scale_fill_manual(name = "Churn", labels = c("No", "Yes"), values = c("blue", "red"))
+                      ) 
+  
+  # Add the plot to the list
+  plot_list_numerical[[variable]] = plot_numerical
+  plot_list_numerical_relationship[[variable]] = plot_numerical_relationship
+}
+
+```
+
+We decided to follow a similar approach as the one with categorical variables. We firstly plotted histograms that showed the distribution of the data and then we considered their relationship with the target variable.
+
+```{r fig.width=10, fig.height=10, echo=FALSE, warning=FALSE}
+
+grid.arrange(
+  arrangeGrob(grobs = plot_list_numerical, nrow = 5, ncol = 3),
+  top = textGrob("Numerical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+)
+
+```
+
+The histograms reveal that several variables, such as Account length, Total day minutes, and Total night charge, exhibit relatively symmetric distributions approximating normality. In contrast, variables like Number vmail messages and Customer service calls display right skewness, where most values are low with a few higher values. Notably, Number vmail messages and Total intl calls have significant zero values, suggesting under utilization of these services. The red dashed lines represent the means, indicating the central tendency for each variable.
+
+```{r fig.width=10, fig.height=10, echo=FALSE, warning=FALSE}
+
+grid.arrange(
+  arrangeGrob(grobs = plot_list_numerical_relationship, nrow = 5, ncol = 3),
+  top = textGrob("Numerical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold")),
+  bottom = legend,
+  left = textGrob("Count", rot = 90, gp = gpar(fontsize = 14))
+)
+
+```
+
+Across most variables, the proportion of customers who churn (red) is relatively small compared to those who do not churn (blue), consistent with the overall churn rate in the dataset.
+
+For Customer service calls, the churn proportion noticeably increases with higher values, suggesting that frequent contact with customer service may indicate dissatisfaction leading to churn.
+
+In Total day minutes, customers with very high usage show a slightly higher churn rate, potentially due to issues related to usage limits or service quality.
+
+Consequently, we decided to better explore the relationships between the target variable and these two categorical variables.
+
+##### ANOVA test on Total Day Minutes and Churn
+
+The ANOVA (Analysis of Variance) test between a categorical and a continuous variable is a statistical method used to determine if there are significant differences in the means of the continuous variable across the levels of the categorical variable. It tests the null hypothesis that the means are equal across all groups against the alternative hypothesis that at least one group mean is different.
+
+In the first place, we better represent the data with boxplots.
+
+```{r echo=FALSE}
+
+ggplot(Data, aes(x = Churn, y = `Total.day.minutes`, fill = Churn)) + 
+  geom_boxplot() + 
+  ggtitle("Total Day Minutes by Churn Status") + 
+  xlab("Churn") + 
+  ylab("Total Day Minutes") +
+  scale_fill_manual(values = c("red", "blue")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+  )
+
+```
+
+Churners (blue) have a higher median Total Day Minutes compared to non-churners (red). The spread of Total Day Minutes is similar for both groups, but non-churners have more outliers with lower usage. This confirms that higher Total Day Minutes among churners suggest that heavy usage might be linked to a higher likelihood of churn, while the inactive users (outliers) do not churn at all.
+
+```{r echo=FALSE, warning=FALSE}
+
+
+# Perform an ANOVA to test the hypothesis H0 that the two means (of the groups),
+# are the same, suggesting that having more minutes is not a valid indicator for Churn.
+
+anova_total_minutes = aov(Total.day.minutes ~ Churn, data = Data)
+print("ANOVA Test on Total day minutes and Churn")
+summary(anova_total_minutes)
+```
+
+The ANOVA test shows a significant effect of Churn on the continuous variable analyzed, with a very high F value (146.4) and a p-value \< 2e-16. This indicates that the means of Total day minutes differ significantly between the churn and non-churn groups.
+
+##### ANOVA test on Customer Service Calls and Churn
+
+We repeat the same test for Customer Service Calls
+
+```{r echo=FALSE, warning=FALSE}
+
+anova_service_calls = aov(Customer.service.calls ~ Churn, data = Data)
+print("ANOVA Test on Customer Service Calls and Churn")
+summary(anova_service_calls)
+
+```
+
+In this case, the ANOVA results show a highly significant effect of the churn status on the continuous variable, with a very low p-value (\< 2e-16). This indicates a significant difference in the means of the continuous variable between customers who churn and those who do not. The high F value (151.8) suggests that the churn status explains a substantial portion of the variability in the continuous variable, more so than indicated by the previous ANOVA results.
+
+### Correlation Analysis
+
+In this section, we measure the correlation between numerical variables. Correlation is a statistical measure that describes the extent to which two variables change together. It is particularly relevant since collinearity, or multicollinearity, occurs when two or more predictor variables in a dataset are highly correlated. This means that these variables share similar information and move together in a predictable way. We will deal later with this aspect.
+
+```{r fig.width=10, echo=FALSE}
+
+### COLLINEARITY
+
+cor_matrix = cor(Data[numerical_variables], use="complete.obs")
+corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
+         addCoef.col = "black", 
+         number.cex = 0.7,
+         addgrid.col = "grey",
+         tl.cex = 0.8,
+         col = colorRampPalette(c("red", "white", "blue"))(200))
+
+```
+
+This correlation matrix shows the relationships between various numerical variables in the dataset. It reveals that no variables are strongly correlated with each other. However, there are some variables that are essentially the same quantity, such as Total day minutes and Total day charge, Total eve minutes and Total eve charge, and Total night minutes and Total night charge, as indicated by their perfect or near-perfect correlations (correlation coefficients close to 1). This is because the total charge for each type is computed by multiplying the total minutes by a constant (or nearly constant) factor. For instance, in the case of day charge, the factor is 0.17. Hence, these pairs of variables provide the same information.
+
+## Preprocessing
+
+### Dealing with collinearity
+
+As stated above, considering collinearity and correlations is crucial in classification problems because highly correlated variables can lead to redundancy and affect the model's performance. When predictors are highly correlated, they may provide overlapping information, which can complicate the model's ability to learn effectively and can also inflate the importance of certain features. By identifying and addressing these correlations, we can simplify the model, improve its interpretability, and enhance its predictive performance. Consequently, we proceed in removing variables that are highly correlated to others.
+
+```{r echo=FALSE}
+
+# We have seen in our EDA that there are more features with a really high correlation
+# and hence we have to drop them.
+
+cor_matrix[!lower.tri(cor_matrix)] = 0
+
+# Find the pairs with correlation greater than the threshold
+threshold = 0.8
+high_corr_pairs = which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+
+# Create a data frame with the results
+high_corr_df = data.frame(
+  Variable1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+  Variable2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
+  Correlation = cor_matrix[high_corr_pairs]
+)
+
+variables_to_drop = high_corr_df$Variable1
+
+for (variable in variables_to_drop) {
+  Data[[variable]] = NULL
+  cat("Dropped", variable)
+  cat("\n")
+  numerical_variables = setdiff(numerical_variables, variable)
+  variables = setdiff(variables, variable)
+  predictors = setdiff(predictors, variable)
+}
+
+```
+
+### Dealing with categorical variable with too many levels
+
+Having a categorical variable with too many levels in the dataset can increase model complexity, lead to overfitting, reduce computational efficiency, and make the model harder to interpret. In our case, the variable State has too many levels and hence needs to be preprocessed to reduce its dimension. After some research, we found that since 1950, the United States Census Bureau (a principal agency of the U.S. Federal Statistical System, responsible for producing data about the American people) defines four statistical regions: Northeast, West, South, and Midwest. This division is widely used for data collection and analysis and fits our case particularly well as it reduces the levels of the variable from 51 to 4, a significant improvement.
+
+```{r echo=FALSE}
+# Create a list to store regions and their states
+dic = list()
+dic$Northeast = c("CT", "ME", "MA", "NH", "NJ", "NY", "PA", "RI", "VT")
+dic$Midwest = c("IL", "IN", "IA", "KS", "MI", "MN", "MO", "NE", "ND", "OH", "SD", "WI")
+dic$South = c("AL", "AR", "DE", "DC", "FL", "GA", "KY", "LA", "MD", "MS", "NC", "OK", "SC", "TN", "TX", "VA", "WV")
+dic$West = c("AK", "AZ", "CA", "CO", "HI", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY")
+
+
+# Function to find the region for a state
+find_region <- function(state) {
+  for (region in names(dic)) {
+    if (state %in% dic[[region]]) {
+      return(region)
+    }
+  }
+  return(NA)
+}
+
+# Apply the function to each state in the data frame to add the region column
+Data$Region = sapply(Data$State, find_region)
+print("Distinct values for the Region variable:")
+# print(unique(Data$Region))
+
+# Converting region in a factor and dropping (but storing) the State variable
+Data$Region = as.factor(Data$Region)
+states = Data$State
+Data$State = NULL
+variables = setdiff(variables, "State")
+categorical_variables = setdiff(categorical_variables, "State")
+predictors = setdiff(predictors, "State")
+variables = c(variables, "Region")
+categorical_variables = c(categorical_variables, "Region")
+predictors = c(predictors, "Region")
+
+```
+
+## Splitting and Scaling the data
+
+In the first place, we decided to split the dataset into a training set (75% of the data) and a test set (25% of the data). We examined the distribution of the target variable Churn for the original, training, and test sets, displaying the counts and proportions of churned vs. non-churned customers.
+
+```{r echo=FALSE}
+### NORMAL SPLIT
+
+set.seed(1)
+
+id_train = sample(1:nrow(Data), size = 0.75*nrow(Data), replace = F)
+train_data = Data[id_train,]
+test_data = Data[-id_train,]
+
+# Response variable distribution in the original data
+cat("Distribution of the target variable in the original set:\n")
+cat("Counts:")
+print(table(Data$Churn))
+cat("Proportions:")
+print(prop.table(table(Data$Churn)))
+cat("\n")
+
+# Response variable distribution in the train test
+cat("Distribution of the target variable in the train set:\n")
+cat("Counts:")
+print(table(train_data$Churn))
+cat("Proportions:")
+print(prop.table(table(train_data$Churn)))
+cat("\n")
+
+# Response variable distribution in the test set
+cat("Distribution of the target variable in the validation set:\n")
+cat("Counts:")
+print(table(test_data$Churn))
+cat("Proportions:")
+print(prop.table(table(test_data$Churn)))
+
+```
+
+To address the unbalanced dataset, we created a training set using oversampling. Oversampling is important as it provides the model with enough examples of the minority class, helping it learn the characteristics of both classes more accurately. This improves the model's ability to predict minority class instances, which is crucial in our analysis since predicting customer churn is a key objective for Telecom.
+
+We also attempted undersampling, as suggested in the R reference script of the project. However, the results were quite poor due to the reduced number of data points available for training, which limited the model's learning capability. Consequently, we did not report our findings using this technique.
+
+```{r echo=FALSE}
+
+### OVERSAMPLING
+
+set.seed(1)
+
+# Calculate the total number of samples needed for balanced oversampling
+# We want each class to have max_class_count samples
+target_N <- 2 * max(table(train_data$Churn))
+
+# Perform oversampling
+train_data_oversample <- ovun.sample(Churn ~ ., data = train_data, method = "over", N = target_N)$data
+
+# Response variable distribution in the train set with over sampling
+cat("Distribution of the target variable in the oversampled test set:\n")
+cat("Counts:")
+print(table(train_data_oversample$Churn))
+cat("Proportions:")
+print(prop.table(table(train_data_oversample$Churn)))
+
+```
+
+Afterwards, we scaled the numerical variables in the training and oversampled datasets using their respective means and standard deviations. Scaling ensures that all numerical features contribute equally to the model’s learning process, preventing features with larger ranges from dominating the model’s behavior. We also scaled the test set using the means and standard deviations from the original training set, ensuring consistency in data preprocessing.
+
+```{r include=FALSE, warning=FALSE}
+
+### SCALING
+
+cols_to_scale = numerical_variables
+
+# Normal data
+train_mean = apply(train_data[, cols_to_scale], MARGIN = 2, FUN = mean)
+train_sd = apply(train_data[, cols_to_scale], MARGIN = 2, FUN = sd)
+train_data_scaled = train_data
+train_data_scaled[, cols_to_scale] = scale(train_data[, cols_to_scale], 
+                                                      center = train_mean, 
+                                                      scale = train_sd)
+
+# Oversample data
+train_oversample_mean = apply(train_data_oversample[, cols_to_scale], MARGIN = 2, FUN = mean)
+train_overssample_sd = apply(train_data_oversample[, cols_to_scale], MARGIN = 2, FUN = sd)
+train_data_scaled_oversample = train_data_oversample
+train_data_scaled_oversample[, cols_to_scale] = scale(train_data_oversample[, cols_to_scale], 
+                                                      center = train_oversample_mean, 
+                                                      scale = train_overssample_sd)
+
+
+# Scale validation data using training data's parameters
+test_data_scaled = test_data
+test_data_scaled[, cols_to_scale] = scale(test_data_scaled[, cols_to_scale], 
+                                          center = train_mean, 
+                                          scale = train_sd)
+
+test_data_scaled_oversample = test_data
+test_data_scaled_oversample[, cols_to_scale] = scale(test_data_scaled_oversample[, cols_to_scale], 
+                                                     center = train_oversample_mean, 
+                                                     scale = train_overssample_sd)
+
+```
+
+## Best Model Selection
+
+```{r include=FALSE}
+
+#### Function to compare performances
+
+get.metrics<- function(conf.mat) {
+  true.positives <- conf.mat[2,2]
+  true.negatives <- conf.mat[1,1]
+  false.positives <- conf.mat[1,2]
+  false.negatives <- conf.mat[2,1]
+  num.observations <- true.positives + true.negatives + false.positives + false.negatives
+  
+  accuracy <- (true.positives + true.negatives) / num.observations
+  precision <- (true.positives) / (true.positives + false.positives)
+  recall <- true.positives / (true.positives + false.negatives)
+  f1 <- 2 * ((precision * recall) / (precision + recall))
+  
+  metrics <- data.frame(t(c(accuracy, precision, recall, f1)))
+  columns <- c("Accuracy", "Precision", "Recall", "F1")
+  colnames(metrics) <- columns
+  
+  return(metrics)
+}
+
+# Create a list to store every confusion matrix
+
+confusion_matrices = list()
+
+```
+
+
+In this section, we explore various models and techniques in order to train the best possible model in order to predict consumer churn. Since in general the oversampled dataset provided better performances, we are going to consider only the latter, except for cases in which certain results are particularly relevant.
+
+### Logistic Regression
+
+In the first place, we consider as baseline the models in which no variable is used and all variables are included. Firstly, we build the model with all the variables.
+
+```{r warning=FALSE}
+
+model_baseline_logistic = glm(Churn ~ ., 
+                              data = train_data_scaled_oversample, 
+                              family = "binomial")
+
+```
+
+
+```{r include=FALSE}
+
+# Storing the results in a confusion matrix
+baseline_logistic_predictions_oversample = ifelse(predict(model_baseline_logistic_oversample, 
+               newdata = test_data_scaled_oversample) > 0.5, 1, 0)
+confusion_matrix_baseline_logistic_oversample = table(baseline_logistic_predictions_oversample, 
+                                                      test_data_scaled_oversample$Churn)
+
+```
+
+Then, we consider the model without any variable:
+
+```{r}
+model_0 = glm(Churn ~ 1,
+                   family = "binomial",
+                   data = train_data_scaled_oversample)
+
+```
+
+And subsequently we test the hypothesis of equivalence between the two models
+
+```{r}
+
+anova(model_0, model_baseline_logistic_oversample, test = "Chisq")
+
+```
+The null model fits the data poorly with a deviance of 5905.6. The full model, which includes all the specified predictors, fits the data significantly better, with a deviance of 4437.3. The reduction in deviance (1468.3) is highly significant, with a p-value < 2.2e-16. Including the predictors in Model 2 significantly improves the fit of the model, 
+indicating that the predictors collectively provide valuable information in predicting customer churn.
+
+### Variable selection with BIC and AIC
+
+Variable selection is a crucial step in building efficient and interpretable models. It involves identifying the most relevant predictors from a set of potential variables. Two commonly used criteria for model selection are the Akaike Information Criterion (AIC) and the Bayesian Information Criterion (BIC).
+
+#### AIC
+
+AIC is used to compare models, with a focus on finding the model that best balances fit and complexity. It penalizes the number of parameters, discouraging overfitting, while prioritizing models with a better fit to the data.
+We performed feature selection using three different methods: forward selection, backward selection, and both directions selection.
+
+```{r include=FALSE}
+set.seed(1)
+aic_model_forward_oversample = step(glm(Churn ~ 1, 
+                      family = "binomial", 
+                      data = test_data_scaled_oversample), 
+                  scope = formula(model_baseline_logistic_oversample), 
+                  direction = "forward")
+aic_model_backward_oversample = step(model_baseline_logistic_oversample, direction = "backward")
+aic_model_both_oversample = step(model_baseline_logistic_oversample, direction = "both")
+
+# Number of features selected by each model
+num_features_aic_forward_oversample = length(coef(aic_model_forward_oversample)) - 1
+num_features_aic_backward_oversample = length(coef(aic_model_backward_oversample)) - 1
+num_features_aic_both_oversample = length(coef(aic_model_both_oversample)) - 1
+
+# Selected variables
+selected_variables_aic_forward_oversample = names(coef(aic_model_forward_oversample))[-1]
+selected_variables_aic_backward_oversample = names(coef(aic_model_backward_oversample))[-1]
+selected_variables_aic_both_oversample = names(coef(aic_model_both_oversample))[-1]
+
+```
+
+```{r echo=FALSE}
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection", num_features_aic_forward_oversample, "features have been selected.")
+cat("\n")
+print(paste(selected_variables_aic_forward_oversample, collapse = ", "))
+cat("\n")
+
+cat("With backward selection", num_features_aic_backward_oversample, "features have been selected")
+cat("\n")
+print(paste(selected_variables_aic_backward_oversample, collapse = ", ")) 
+cat("\n")
+
+cat("With both directions selection", num_features_aic_both_oversample, "features have been selected")
+cat("\n")
+print(paste(selected_variables_aic_both_oversample, collapse = ", ")) 
+cat("\n")
+
+
+```
+Given the goal of creating a simpler model to avoid overfitting and enhance interpretability, we will choose the model generated by forward selection. This model includes only 9 features, providing a balance between simplicity and predictive power.
+
+```{r include=FALSE}
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_oversample = c(forward = num_features_aic_forward_oversample, 
+                              backward = num_features_aic_backward_oversample, 
+                              both = num_features_aic_both_oversample)
+selected_model_name_oversample = names(which.min(feature_counts_oversample))
+
+if (selected_model_name_oversample == "forward") {
+  model_aic_final_oversample = aic_model_forward_oversample
+} else if (selected_model_name_oversample == "backward") {
+  model_aic_final_oversample = aic_model_backward_oversample
+} else {
+  model_aic_final_oversample = aic_model_both_oversample
+}
+
+# Computing and storing predictions on the validation data
+aic_model_predictions_oversample = ifelse(predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
+confusion_matrix_aic_oversample = table(aic_model_predictions_oversample, test_data_scaled_oversample$Churn)
+confusion_matrices[["aic_oversample"]] = confusion_matrix_aic_oversample
+
+```
+
+#### BIC
+
+BIC is similar to AIC but applies a stronger penalty for the number of parameters. It is particularly useful for selecting simpler models, as it penalizes model complexity more heavily than AIC.
+
+```{r include=FALSE}
+set.seed(1)
+bic_model_forward_oversample = step(glm(Churn ~ 1, 
+                                        family = "binomial", 
+                                        data = test_data_scaled_oversample), 
+                                    scope = formula(model_baseline_logistic_oversample), 
+                                    direction = "forward",
+                                    k = log(nrow(test_data_scaled_oversample)))
+bic_model_backward_oversample = step(model_baseline_logistic_oversample, direction = "backward", k = log(nrow(test_data_scaled_oversample)))
+bic_model_both_oversample = step(model_baseline_logistic_oversample, direction = "both", k = log(nrow(test_data_scaled_oversample)))
+
+# Number of features selected by each model
+num_features_bic_forward_oversample = length(coef(bic_model_forward_oversample)) - 1
+num_features_bic_backward_oversample = length(coef(bic_model_backward_oversample)) - 1
+num_features_bic_both_oversample = length(coef(bic_model_both_oversample)) - 1
+
+# Selected variables
+selected_variables_bic_forward_oversample = names(coef(bic_model_forward_oversample))[-1]
+selected_variables_bic_backward_oversample = names(coef(bic_model_backward_oversample))[-1]
+selected_variables_bic_both_oversample = names(coef(bic_model_both_oversample))[-1]
+
+```
+
+```{r echo=FALSE}
+
+# Print the number of features selected and the selected variables for each method
+cat("With forward selection (BIC)", num_features_bic_forward_oversample, "features have been selected.")
+cat("\n")
+print(paste(selected_variables_bic_forward_oversample, collapse = ", "))
+cat("\n")
+
+cat("With backward selection (BIC)", num_features_bic_backward_oversample, "features have been selected")
+cat("\n")
+print(paste(selected_variables_bic_backward_oversample, collapse = ", "))
+cat("\n")
+
+cat("With both directions selection (BIC)", num_features_bic_both_oversample, "features have been selected")
+cat("\n")
+print(paste(selected_variables_bic_both_oversample, collapse = ", "))
+cat("\n")
+
+```
+Again, the simplest model (the one with the lowest number of covariates) should be selected. In this case, with forward selection BIC selected 7 features confirming that it applies a stronger penalty for model complexity, often leading to simpler models.
+
+In general, the process of feature selection confirmed that the variables International Plan, Total day minutes and Customer Service calls are relevant in order to predict customer Churn. Also, considering the stricter model we discover that the Region (State) categorical variable is not taken into account, while Voice mail plan, Total eve minutes, Total night minutes and Total intl minutes are kept in the model. The same features are selected by AIC that also considers Total intl calls and Total day calls.
+
+```{r}
+
+# Select the simplest model, hence the one with the lowest features selected
+feature_counts_bic_oversample = c(forward = num_features_bic_forward_oversample, 
+                                  backward = num_features_bic_backward_oversample, 
+                                  both = num_features_bic_both_oversample)
+selected_model_name_bic_oversample = names(which.min(feature_counts_bic_oversample))
+
+if (selected_model_name_bic_oversample == "forward") {
+  model_bic_final_oversample = bic_model_forward_oversample
+} else if (selected_model_name_bic_oversample == "backward") {
+  model_bic_final_oversample = bic_model_backward_oversample
+} else {
+  model_bic_final_oversample = bic_model_both_oversample
+}
+
+# Computing and storing predictions on the validation data
+bic_model_predictions_oversample = ifelse(predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
+confusion_matrix_bic_oversample = table(bic_model_predictions_oversample, test_data_scaled_oversample$Churn)
+confusion_matrices[["bic_oversample"]] = confusion_matrix_bic_oversample
+
+```
+
+### Comparisson Linear models
+
+In the first place, we report the confusion matrix for each of the three models that were previously trained in order to have a general understanding of their performance. It is important to recall that each prediction has been made on the test set (on which the models were not trained) that was previously scaled with the ::: of the test set.
+
+```{r include=FALSE}
+# Function to plot confusion matrices 
+
+plot_confusion_matrix <- function(conf_matrix, title) {
+  conf_df <- as.data.frame(as.table(conf_matrix))
+  colnames(conf_df) <- c("Predicted", "Actual", "Freq")
+  
+  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = Freq), vjust = 1) +
+    scale_fill_gradient(low = "white", high = "red") +
+    labs(title = title, x = "Predicted", y = "Actual") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.position = NULL)
+}
+```
+
+```{r echo=FALSE}
+
+# Create the plots
+baseline_plot = plot_confusion_matrix(confusion_matrix_baseline_logistic_oversample, "Baseline Model")
+aic_plot = plot_confusion_matrix(confusion_matrix_aic_oversample, "AIC Model")
+bic_plot = plot_confusion_matrix(confusion_matrix_bic_oversample, "BIC Model")
+
+# Arrange the plots in a single layout
+grid.arrange(baseline_plot, aic_plot, bic_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+```
+Then, we proceed by comparing the results of the models in terms of metrics.
+
+```{r echo=FALSE}
+# Calculate metrics for each model
+metrics_baseline = get.metrics(confusion_matrix_baseline_logistic_oversample)
+metrics_aic = get.metrics(confusion_matrix_aic_oversample)
+metrics_bic = get.metrics(confusion_matrix_bic_oversample)
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic)
+rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+plot_table = function(df) {
+  
+  table_theme = ttheme_default(
+    core = list(
+      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
+      fg_params = list(fontface = 1, fontsize = 16)
+    ),
+    colhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    ),
+    rowhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    )
+  )
+  table_plot = tableGrob(df, theme = table_theme)
+  return(table_plot)
+}
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+```
+Lastly, we consider their performance in terms of AUC (Area Under ROC Curve).
+
+```{r echo=FALSE, warning=FALSE}
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,3)) # 3 rows, 1 column layout for confusion matrices
+roc_baseline = roc(test_data$Churn, 
+                   predict(model_baseline_logistic_oversample, 
+                           newdata = test_data_scaled_oversample, 
+                           type = "response"), 
+                   plot = TRUE, main = "Baseline Model", col = "blue", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+                   predict(model_aic_final_oversample, 
+                           newdata = test_data_scaled_oversample, 
+                           type = "response"), 
+                   plot = TRUE, main = "AIC Model", col = "red", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_bic = roc(test_data$Churn, 
+              predict(model_bic_final_oversample, 
+                      newdata = test_data_scaled_oversample, 
+                      type = "response"), 
+              plot = TRUE, main = "BIC Model", col = "green", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+```
+
