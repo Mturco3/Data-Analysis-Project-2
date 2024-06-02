@@ -25,6 +25,7 @@ library(rpart)
 library(rpart.plot)
 library(randomForest)
 library(doParallel)
+library(pROC)
 
 ```
 
@@ -720,7 +721,7 @@ In the first place, we consider as baseline the models in which no variable is u
 
 ```{r warning=FALSE}
 
-model_baseline_logistic = glm(Churn ~ ., 
+model_baseline_logistic_oversample = glm(Churn ~ ., 
                               data = train_data_scaled_oversample, 
                               family = "binomial")
 
@@ -922,7 +923,7 @@ plot_confusion_matrix <- function(conf_matrix, title) {
     labs(title = title, x = "Predicted", y = "Actual") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5),
-          legend.position = NULL)
+          legend.position = "none")
 }
 ```
 
@@ -1004,3 +1005,53 @@ roc_bic = roc(test_data$Churn,
               auc.polygon = TRUE, print.auc = TRUE)
 ```
 
+### Penalized approaches
+
+#### Lasso Regression
+
+Lasso regression is a linear regression technique that includes a penalty term to reduce model complexity and prevent overfitting. It performs feature selection by shrinking some coefficients to zero, effectively selecting only the most important predictors. This helps in building simpler and more interpretable models.
+
+```{r echo=FALSE, warning=FALSE}
+
+# Train the Lasso regression model on the oversampled data
+X_train_oversample = train_data_scaled_oversample
+Y_train_oversample = as.numeric(X_train_oversample$Churn)
+X_train_oversample$Churn = NULL
+fit_oversample = glmnet(as.matrix(X_train_oversample), Y_train_oversample, alpha = 1, lambda = seq(0, 0.15, length = 30))
+
+# Plot coefficient values against the (log-)lambda sequence
+predictor_names_oversample = colnames(as.matrix(X_train_oversample))
+colors_oversample = sample(1:length(predictor_names_oversample))
+plot(fit_oversample, xvar = "lambda", label = TRUE, col = colors_oversample)
+legend("topright", legend = predictor_names_oversample, col = colors_oversample, lty = 1, cex = 0.5, text.width = 1.2)
+
+```
+
+This plot shows how the coefficients of different features in a Lasso regression model change as the regularization parameter λ increases (left on the x-axis). As it increases, the coefficients shrink toward zero, demonstrating Lasso's feature selection capability. Features with coefficients that remain large even at higher values are considered to be more important, while those that quickly shrink to zero are less important. 
+
+However, in order to train the model a crucial step is the hyperparameter tuning.
+
+```{r}
+set.seed(1)
+# Train the Lasso regression model on the oversampled data with tuning
+model_lasso_oversample = train(Churn ~ ., 
+                               data = train_data_scaled_oversample, 
+                               method = "glmnet", 
+                               metric = "Accuracy", 
+                               trControl = trainControl(method = "cv", number = 10), 
+                               tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+
+# Plot accuracy values against the lambda sequence
+plot(model_lasso_oversample,
+     label = TRUE, 
+     xvar = "lambda")
+
+# Retrieve the maximum accuracy and best tuning parameters 
+# achieved during cross-validation
+best_accuracy_lasso_oversample = max(model_lasso_oversample$results$Accuracy)
+best_parameters_lasso_oversample = model_lasso_oversample$bestTune$lambda
+cat("The highest value of accuracy:", best_accuracy_lasso_oversample, "is obtained with lambda =", best_parameters_lasso_oversample, "\n")
+```
+
+
+#### Ridge Regression
