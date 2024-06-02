@@ -26,6 +26,8 @@ library(rpart.plot)
 library(randomForest)
 library(doParallel)
 library(pROC)
+library(knitr)
+library(xgboost)
 
 ```
 
@@ -681,7 +683,7 @@ test_data_scaled_oversample[, cols_to_scale] = scale(test_data_scaled_oversample
 
 ```
 
-## Best Model Selection
+## BEST MODEL SELECTION
 
 ```{r include=FALSE}
 
@@ -712,6 +714,50 @@ confusion_matrices = list()
 
 ```
 
+```{r include=FALSE}
+# Function to plot metrics
+plot_table = function(df) {
+  
+  table_theme = ttheme_default(
+    core = list(
+      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
+      fg_params = list(fontface = 1, fontsize = 16)
+    ),
+    colhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    ),
+    rowhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    )
+  )
+  table_plot = tableGrob(df, theme = table_theme)
+  return(table_plot)
+}
+
+```
+
+```{r include=FALSE}
+
+# Function to plot confusion matrices 
+
+plot_confusion_matrix <- function(conf_matrix, title) {
+  conf_df <- as.data.frame(as.table(conf_matrix))
+  colnames(conf_df) <- c("Predicted", "Actual", "Freq")
+  
+  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = Freq), vjust = 1) +
+    scale_fill_gradient(low = "white", high = "red") +
+    labs(title = title, x = "Predicted", y = "Actual") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.position = "none")
+}
+
+```
+
 
 In this section, we explore various models and techniques in order to train the best possible model in order to predict consumer churn. Since in general the oversampled dataset provided better performances, we are going to consider only the latter, except for cases in which certain results are particularly relevant.
 
@@ -720,7 +766,7 @@ In this section, we explore various models and techniques in order to train the 
 In the first place, we consider as baseline the models in which no variable is used and all variables are included. Firstly, we build the model with all the variables.
 
 ```{r warning=FALSE}
-
+set.seed(1)
 model_baseline_logistic_oversample = glm(Churn ~ ., 
                               data = train_data_scaled_oversample, 
                               family = "binomial")
@@ -731,9 +777,11 @@ model_baseline_logistic_oversample = glm(Churn ~ .,
 ```{r include=FALSE}
 
 # Storing the results in a confusion matrix
-baseline_logistic_predictions_oversample = ifelse(predict(model_baseline_logistic_oversample, 
-               newdata = test_data_scaled_oversample) > 0.5, 1, 0)
-confusion_matrix_baseline_logistic_oversample = table(baseline_logistic_predictions_oversample, 
+probabilities_baseline_logistic_oversample = predict(model_baseline_logistic_oversample, 
+                                                          newdata = test_data_scaled_oversample,
+                                                   type = "response")
+predictions_baseline_logistic_oversample = ifelse(probabilities_baseline_logistic_oversample > 0.5, "True", "False")
+confusion_matrix_baseline_logistic_oversample = table(predictions_baseline_logistic_oversample, 
                                                       test_data_scaled_oversample$Churn)
 
 ```
@@ -826,9 +874,10 @@ if (selected_model_name_oversample == "forward") {
 }
 
 # Computing and storing predictions on the validation data
-aic_model_predictions_oversample = ifelse(predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
-confusion_matrix_aic_oversample = table(aic_model_predictions_oversample, test_data_scaled_oversample$Churn)
-confusion_matrices[["aic_oversample"]] = confusion_matrix_aic_oversample
+# Computing and storing predictions on the test data
+probabilities_aic_oversample = predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response")
+predictions_aic_oversample = ifelse(probabilities_aic_oversample> 0.5, "True", "False")
+confusion_matrix_aic_oversample = table(predictions_aic_oversample, test_data_scaled_oversample$Churn)
 
 ```
 
@@ -899,33 +948,16 @@ if (selected_model_name_bic_oversample == "forward") {
 }
 
 # Computing and storing predictions on the validation data
-bic_model_predictions_oversample = ifelse(predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
-confusion_matrix_bic_oversample = table(bic_model_predictions_oversample, test_data_scaled_oversample$Churn)
-confusion_matrices[["bic_oversample"]] = confusion_matrix_bic_oversample
+# Computing and storing predictions on the validation data
+probabilities_bic_oversample = predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response")
+predictions_bic_oversample = ifelse(probabilities_bic_oversample > 0.5, "True", "False")
+confusion_matrix_bic_oversample = table(predictions_bic_oversample, test_data_scaled_oversample$Churn)
 
 ```
 
 ### Comparisson Linear models
 
 In the first place, we report the confusion matrix for each of the three models that were previously trained in order to have a general understanding of their performance. It is important to recall that each prediction has been made on the test set (on which the models were not trained) that was previously scaled with the ::: of the test set.
-
-```{r include=FALSE}
-# Function to plot confusion matrices 
-
-plot_confusion_matrix <- function(conf_matrix, title) {
-  conf_df <- as.data.frame(as.table(conf_matrix))
-  colnames(conf_df) <- c("Predicted", "Actual", "Freq")
-  
-  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
-    geom_tile(color = "black") +
-    geom_text(aes(label = Freq), vjust = 1) +
-    scale_fill_gradient(low = "white", high = "red") +
-    labs(title = title, x = "Predicted", y = "Actual") +
-    theme_minimal() +
-    theme(plot.title = element_text(hjust = 0.5),
-          legend.position = "none")
-}
-```
 
 ```{r echo=FALSE}
 
@@ -938,47 +970,7 @@ bic_plot = plot_confusion_matrix(confusion_matrix_bic_oversample, "BIC Model")
 grid.arrange(baseline_plot, aic_plot, bic_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
 
 ```
-Then, we proceed by comparing the results of the models in terms of metrics.
-
-```{r echo=FALSE}
-# Calculate metrics for each model
-metrics_baseline = get.metrics(confusion_matrix_baseline_logistic_oversample)
-metrics_aic = get.metrics(confusion_matrix_aic_oversample)
-metrics_bic = get.metrics(confusion_matrix_bic_oversample)
-
-# Combine metrics into a single data frame
-metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic)
-rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
-
-# Round the metrics to 2 decimal places
-metrics_combined = round(metrics_combined, 4)
-
-plot_table = function(df) {
-  
-  table_theme = ttheme_default(
-    core = list(
-      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
-      fg_params = list(fontface = 1, fontsize = 16)
-    ),
-    colhead = list(
-      bg_params = list(fill = "lightblue", col = "black"),
-      fg_params = list(fontface = 2, fontsize = 18)
-    ),
-    rowhead = list(
-      bg_params = list(fill = "lightblue", col = "black"),
-      fg_params = list(fontface = 2, fontsize = 18)
-    )
-  )
-  table_plot = tableGrob(df, theme = table_theme)
-  return(table_plot)
-}
-
-# Create the table plot
-grid.newpage()
-grid.draw(plot_table(metrics_combined))
-
-```
-Lastly, we consider their performance in terms of AUC (Area Under ROC Curve).
+Also, we consider their performance in terms of AUC (Area Under ROC Curve).
 
 ```{r echo=FALSE, warning=FALSE}
 # Compute ROC curves
@@ -1013,6 +1005,7 @@ Lasso regression is a linear regression technique that includes a penalty term t
 
 ```{r echo=FALSE, warning=FALSE}
 
+set.seed(1)
 # Train the Lasso regression model on the oversampled data
 X_train_oversample = train_data_scaled_oversample
 Y_train_oversample = as.numeric(X_train_oversample$Churn)
@@ -1027,7 +1020,7 @@ legend("topright", legend = predictor_names_oversample, col = colors_oversample,
 
 ```
 
-This plot shows how the coefficients of different features in a Lasso regression model change as the regularization parameter λ increases (left on the x-axis). As it increases, the coefficients shrink toward zero, demonstrating Lasso's feature selection capability. Features with coefficients that remain large even at higher values are considered to be more important, while those that quickly shrink to zero are less important. 
+This plot shows how the coefficients of different features in a Lasso regression model change as the regularization parameter increases (left on the x-axis). As it increases, the coefficients shrink toward zero, demonstrating Lasso's feature selection capability. Features with coefficients that remain large even at higher values are considered to be more important, while those that quickly shrink to zero are less important. 
 
 However, in order to train the model a crucial step is the hyperparameter tuning.
 
@@ -1051,7 +1044,971 @@ plot(model_lasso_oversample,
 best_accuracy_lasso_oversample = max(model_lasso_oversample$results$Accuracy)
 best_parameters_lasso_oversample = model_lasso_oversample$bestTune$lambda
 cat("The highest value of accuracy:", best_accuracy_lasso_oversample, "is obtained with lambda =", best_parameters_lasso_oversample, "\n")
+
+```
+
+The best accuracy is obtained without a regularization parameter: in follows that the model built is a simple linear regression model. As the parameter continues to increase beyond 0.05, the accuracy starts to decline more steeply, indicating that the model is becoming overly regularized. This excessive penalization of the coefficients leads to underfitting, where the model is too simple to capture the underlying patterns in the data.
+
+```{r include=FALSE}
+
+# Computing and storing predictions
+probabilities_lasso_oversample = predict(model_lasso_oversample, test_data_scaled_oversample, type = "prob")[, "True"]
+predictions_lasso_oversample = ifelse(probabilities_lasso_oversample > 0.5, "True", "False")
+confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_data_scaled_oversample$Churn)
+
 ```
 
 
 #### Ridge Regression
+
+Ridge regression is another linear regression technique that includes a penalty term to reduce model complexity and prevent overfitting. Unlike Lasso regression, which can shrink some coefficients to zero and perform feature selection, with Ridge the coefficients tend to zero but they are never exactly to zero. 
+
+```{r}
+
+set.seed(1)
+ridge_fit_oversample = glmnet(x = X_train_oversample,
+                              y = Y_train_oversample,
+                              alpha = 0)
+```
+
+```{r echo=FALSE}
+plot(ridge_fit_oversample,
+     label = F, 
+     xvar = "lambda")
+legend("topright", legend = colnames(X_train_oversample), 
+       col = 1:ncol(X_train_oversample), lty = 1, cex = 0.5)
+
+```
+The plot confirms the earlier statement: as the parameter Lambda increases, the coefficients shrink towards zero but never actually reach it, in contrast with what we have previously shown with Lasso.
+Another relevant observation is that the plot highlights the most important features, namely International Plan, Total daily minutes, Customer service calls, and Total night minutes. These features are shrunk at the lowest rate, indicating their significance in the model
+
+We then proceed, as we have done for 
+
+```{r}
+
+set.seed(1)
+model_ridge_oversample = train(Churn ~ ., 
+                               data = train_data_scaled_oversample, 
+                               method = "glmnet", 
+                               metric = "Accuracy", 
+                               trControl = trainControl(method = "cv", number = 10), 
+                               tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+
+
+```
+
+```{r echo=FALSE}
+
+
+model_ridge_oversample %>% 
+  ggplot(aes(x = lambda, y = Accuracy)) + 
+  geom_line() + 
+  geom_point() +
+  geom_text(aes(label = sprintf("%.3f", Accuracy)), check_overlap = TRUE, vjust = -0.5, size = 2.5) + 
+  labs(x = TeX("Lambda ($\\lambda$)"), y = "Accuracy", title = "Accuracy vs. Lambda for Ridge Regularization") +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+
+cat("The highest accuracy is:", max(model_ridge_oversample$results$Accuracy),
+    "with parameter lambda =", model_ridge_oversample$bestTune$lambda)
+
+
+```
+```{r include=FALSE}
+
+probabilities_ridge_oversample = predict(model_ridge_oversample, test_data_scaled_oversample, 
+                                         type = "prob")[,"True"]
+predictions_ridge_oversample = ifelse(probabilities_ridge_oversample > 0.5, "True", "False")
+confusion_matrix_ridge_oversample = table(predictions_ridge_oversample, test_data_scaled_oversample$Churn)
+
+```
+
+### Comparisson between penalized approaches
+
+```{r echo=FALSE}
+
+## Confusion matrices
+
+# Create the plots
+lasso_plot = plot_confusion_matrix(confusion_matrix_lasso_oversample, "Lasso")
+ridge_plot = plot_confusion_matrix(confusion_matrix_ridge_oversample, "Ridge")
+
+
+# Arrange the plots in a single layout
+grid.arrange(lasso_plot, ridge_plot, ncol = 2, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+
+```
+
+```{r echo=FALSE, warning=FALSE}
+
+## ROC
+
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,2)) # 3 rows, 1 column layout for confusion matrices
+roc_lasso = roc(test_data$Churn, probabilities_lasso_oversample, 
+             plot = TRUE, main = "Lasso", col = "blue", lwd = 3, 
+             auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+              probabilities_ridge_oversample, 
+              plot = TRUE, main = "Ridge", col = "red", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+par(mfrow=c(1,1))
+
+
+```
+
+
+
+
+### Non linear methods
+
+#### Random Forests
+
+With Random Forests, a number of decision trees is built on bootstrapped training samples. However, each time a split in a tree is considered, a random sample of m predictors is chosen as split candidates from the full set of predictors.
+
+We first start by building a simple model with default parameters. The number of predictors considered at each split (mtry in the code) is typically the square root of the number of the predictors. In our case is then 4. We also consider a forest with 500 trees. 
+```{r}
+
+set.seed(1)
+random_forest_model_oversample = randomForest(Churn ~ ., data = train_data_oversample, 
+                                              mtry = 4, 
+                                              ntree = 500, 
+                                              importance = T)
+```
+
+In this first analysis, we are not really interested on the model performance but we just want to know how the OOB error changes increasing the number of the trees.
+
+```{r}
+
+# Storing the error rate matrix
+error_rate_matrix_oversample = random_forest_model_oversample$err.rate
+
+# Creating the error rate data frame for plotting
+error_rate_matrix_oversample = data.frame(
+  Trees = rep(1:nrow(error_rate_matrix_oversample), times = 3),
+  Type = rep(c("OOB", "False", "True"), each = nrow(error_rate_matrix_oversample)),
+  Error = c(error_rate_matrix_oversample[, "OOB"],
+            error_rate_matrix_oversample[, "False"],
+            error_rate_matrix_oversample[, "True"])
+)
+
+# Plotting the error rate
+ggplot(data = error_rate_matrix_oversample, aes(x = Trees, y = Error)) +
+  geom_line(aes(color = Type))
+
+```
+We can see that the out-of-bag (OOB) error stabilizes after around 100 trees, indicating that the random forest model achieves consistent performance. The error for the "True" class is significantly lower than the "False" class, suggesting the model is better at predicting "True" than "False".
+
+We can also show the features importance considering the metric of mean decrease accuracy.
+
+```{r echo=FALSE}
+
+importance_values = importance(random_forest_model_oversample)
+
+# Plotting the feature importance plot for MeanDecreaseAccuracy 
+importance_df = data.frame(
+  Feature = rownames(importance_values),
+  MeanDecreaseAccuracy = importance_values[, "MeanDecreaseAccuracy"]
+)
+
+importance_df = importance_df[order(importance_df$MeanDecreaseAccuracy, decreasing = TRUE), ]
+par(mar = c(5, 8, 4, 2) + 0.1)  
+barplot(
+  importance_df$MeanDecreaseAccuracy,
+  names.arg = importance_df$Feature,
+  las = 2,
+  col = "skyblue",
+  main = "Feature Importance - Mean Decrease in Accuracy",
+  xlab = "Mean Decrease in Accuracy",
+  cex.names = 0.7, 
+  horiz = TRUE
+)
+par(mar = c(5, 4, 4, 2) + 0.1) 
+
+```
+We can see that "Total day minutes", "Customer service calls", "Total eve minutes" and "International Plan" are among the most important features, as they have the highest values in both metrics, indicating their strong influence on model accuracy and confirming our findings so far.
+
+
+One of the most straighforward drawback of random forests is their tendency to overfit the data. This is caused by the fact that the algorithm is based on the construction of decision trees which are particularly prone to overfitting. Even if random forests address the issue increasing the variability of the model, a process of hyperparameter tuning is fundamental for an optimal performance. 
+
+In our R reference code, we adapted two different strategies in order to tune the parameters. In the first one, we used a classic approach with the function "train", specifying a tune grid to test with cross validation (5 folds). However, this function allows to automatically tune only the parameter mtry, and hence it does not consider other relevant parameters such as the number of trees, the maximum number of nodes and the node size. Hence, we decided to build a grid, randomly sample combinations and test them considering the OOB error, an accurate way to estimate the test error. Since the latter yelds better results, we decided to report it.
+
+```{r include=FALSE}
+
+# Create a random sample of hyperparameter combinations
+set.seed(1)
+hyperparameter_grid <- expand.grid(
+  n_tree = c(400,450,500,550,600),
+  m_try = 1:12,
+  max_nodes = c(10, 25, 50, 75, 100, 200, 300),
+  node_size = 1:10
+)
+
+# Sample a smaller grid for random search
+sampled_grid = hyperparameter_grid %>% sample_n(50)
+
+# Evaluate all combinations
+results_random_forest_tuning = data.frame()
+for (i in 1:nrow(sampled_grid)) {
+  params = sampled_grid[i, ]
+  print(params)
+  rf_model = randomForest(
+    Churn ~ .,
+    data = train_data_oversample,
+    ntree = params$n_tree,
+    mtry = params$m_try,
+    maxnodes = params$max_nodes,
+    nodesize = params$node_size,
+    importance = TRUE
+  )
+  # Calculate the mean error rate
+  mean_err_rate = mean(rf_model$err.rate[, 1])
+  print(mean_err_rate)
+  
+  # Appending the results in the dataframe
+  results_random_forest_tuning = rbind(results_random_forest_tuning,
+                                       cbind(params, mean_err_rate))
+}
+
+```
+
+```{r echo=FALSE}
+
+# Find the best parameters
+best_parameters_random_forest = results_random_forest_tuning %>%
+  filter(mean_err_rate == min(mean_err_rate))
+library(knitr)
+
+kable(best_parameters_random_forest, caption = "Best Parameters for Random Forest")
+
+```
+
+Once we have found our tuned hyperparameters, we use them in order to build the model that will be used in order for us to predict Customer Churn.
+
+```{r}
+
+# Train the final model with the best parameters
+final_rf_model <- randomForest(
+  Churn ~ .,
+  data = train_data_oversample,
+  ntree = best_parameters_random_forest$n_tree,
+  mtry = best_parameters_random_forest$m_try,
+  nodesize = best_parameters_random_forest$node_size,
+  maxnodes = best_parameters_random_forest$max_nodes,
+  importance = TRUE
+)
+
+```
+
+```{r include=FALSE}
+
+# Make predictions on the test set
+probabilities_rf = predict(final_rf_model, test_data, type = "prob")[, "True"]
+predictions_rf = ifelse(probabilities_rf > 0.5, "True", "False")
+confusion_matrix_rf = table(predictions_rf, test_data$Churn)
+
+```
+
+### XGBOOST
+
+XGBoosting is an advanced implementation of gradient boosting that builds an ensemble of decision trees sequentially, with each tree correcting the errors of the previous ones, optimized for speed and performance.
+
+Since XGBoost requires numerical input and cannot directly handle categorical variables, a first essential step is to create dummy variables.
+
+```{r warning=FALSE}
+
+# Create dummy variables for the data
+X_train_oversample_dummy = dummyVars(Churn ~ ., data = train_data_oversample) %>% predict(train_data_oversample)
+Y_train_oversample_dummy = train_data_oversample$Churn %>% as.numeric(.) - 1
+X_test_oversample_dummy = dummyVars(Churn ~ ., data = test_data) %>% predict(test_data)
+Y_test_oversample_dummy = test_data$Churn %>% as.numeric(.) - 1
+
+```
+
+In order to have a general understanding of the performance of the model, we firstly train it without tuning.
+
+```{r message=FALSE, results='hide'}
+
+# In the first place we train the algorithm without tuning
+set.seed(1)
+model_xg = xgboost(as.matrix(X_train_oversample_dummy), 
+                   label = Y_train_oversample_dummy, 
+                 nrounds = 50, 
+                 objective = "binary:logistic", 
+                 eval_metric = "error")
+
+
+```
+
+To gain insight into the relevance of the ntreelimit parameter (and thereby the importance of tuning hyperparameters), we consider the error on the test set. It is important to note that this analysis is not part of the model training process but is merely an evaluation of the parameter, as models should not be trained on the test set.
+
+```{r echo=FALSE}
+
+train_errors = model_xg$evaluation_log$train_error
+val_errors = numeric(50)
+
+for (j in 1:50) {
+  pred_j = ifelse(predict(model_xg, X_test_oversample_dummy)> 0.5, 1, 0)
+  val_errors[j] <- mean(pred_j != Y_test_oversample_dummy)
+}
+
+# Plot the error rates
+plot(1:50, val_errors, type = "b", xlab = "Number of trees", ylab = "Error", col = 3, ylim = c(0, 0.3), cex = 0.5)
+points(1:50, train_errors, type = "b", cex = 0.5)
+legend("topright", legend = c("Train", "Test"), col = c(1, 3), lty = 1, lwd = 2, cex = 0.7)
+
+```
+```{r include=FALSE}
+
+# We then consider its performance
+probabilities_xg = predict(model_xg, X_test_oversample_dummy)
+predictions_xg = ifelse(probabilities_xg> 0.5, 1, 0)
+confusion_matrix_xg = table(predictions_xg, test_data$Churn)
+
+```
+
+The plot shows that as the number of trees increases, the training error consistently decreases, approaching zero, indicating that the model fits the training data very well. However, the test error stabilizes at a low value early on and remains relatively constant, suggesting that additional trees do not significantly improve the model's performance on the test data. This indicates that the model generalizes well without overfitting, as there is a minimal gap between the training and test errors after a certain number of trees.
+
+We then proceed with the process of hyperparameter tuning using cross validation. 
+Since tasks like cross-validation can be paralized, in order to speed up computations, we created a cluster of 5 worker nodes with the library doParallel.
+
+```{r}
+
+cl = makePSOCKcluster(5)
+registerDoParallel(cl)
+
+```
+
+
+```{r include=FALSE}
+
+tune_grid <- expand.grid(
+  nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+  eta = 0.3,
+  max_depth = 5,
+  subsample = 1,
+  colsample_bytree = 1,
+  min_child_weight = 5,
+  gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+)
+
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 10,
+  search = "random"
+)
+
+```
+
+```{r warning=FALSE}
+
+set.seed(1)
+model_xg_cv <- train(
+  Churn ~ ., data = train_data_oversample, 
+  method = "xgbTree", 
+  trControl = fitControl,
+  verbose = FALSE, 
+  tuneGrid = tune_grid,
+  objective = "binary:logistic", 
+  eval_metric = "error"
+)
+
+```
+
+```{r echo=FALSE, warning=FALSE}
+
+# Stop parallel processing
+stopCluster(cl)
+
+# Plot the cross-validation results
+trellis.par.set(caretTheme())
+plot(model_xg_cv)
+
+```
+
+The plot shows the accuracy of an XGBoost model (evaluated via repeated cross-validation) across different boosting iterations (# Boosting Iterations) and minimum loss reduction (gamma) values. The number of boosting iterations significantly impacts the model's accuracy up to a certain point, after which the benefit plateaus. The gamma parameter (minimum loss reduction) has little to no effect on the model's performance within the tested range, indicating that the model is relatively insensitive to this hyperparameter for the given dataset.
+
+```{r include=FALSE}
+
+# Predictions on the test set using the best model
+probabilities_xg_cv = predict(model_xg_cv, test_data, type = "prob")[,"True"]
+predictions_xg_cv = ifelse(probabilities_xg_cv > 0.5, "True", "False")
+confusion_matrix_xg_cv = table(predictions_xg_cv, test_data$Churn)
+
+```
+
+
+#### Comparisson between Tree based models
+
+As we have done before, to firstly asses the performances we plot the confusion matrices for Random Forests and XGBOOST (with and without tuning).
+
+```{r echo=FALSE}
+
+## Confusion matrices
+
+# Create the plots
+rf_plot = plot_confusion_matrix(confusion_matrix_rf, "Random Forest")
+xg_plot = plot_confusion_matrix(confusion_matrix_xg, "XGBOOST")
+xg_cv_plot = plot_confusion_matrix(confusion_matrix_xg_cv, "XGBOOST (Tuned)")
+
+# Arrange the plots in a single layout
+grid.arrange(rf_plot, xg_plot, xg_cv_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+## ROC
+
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,3)) # 3 rows, 1 column layout for confusion matrices
+roc_rf = roc(test_data$Churn, probabilities_rf, 
+                   plot = TRUE, main = "Random Forest", col = "blue", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+              probabilities_xg, 
+              plot = TRUE, main = "XGBOOST", col = "red", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+roc_bic = roc(test_data$Churn, 
+              probabilities_xg_cv, 
+              plot = TRUE, main = "XGBOOST (Tuned)", col = "purple", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+par(mfrow=c(1,1))
+
+
+```
+
+## CONCLUSIONS
+
+Given the high imbalance in our dataset, we’ve prioritized sensitivity in our selection criteria because minimizing false negatives—thereby reducing missed positives—is crucial for our analysis. In the telecom industry, missing a false negative (failing to predict a customer’s churn) is more costly than identifying a false positive (predicting a customer will churn when they won’t). This approach helps ensure we capture as many potential churners as possible, enabling proactive retention efforts and ultimately reducing customer attrition. Balancing sensitivity with accuracy remains important, but sensitivity is our primary focus to mitigate the higher cost of missed churn predictions.
+
+```{r echo=FALSE}
+# Calculate metrics for each model
+metrics_baseline = get.metrics(confusion_matrix_baseline_logistic_oversample)
+metrics_aic = get.metrics(confusion_matrix_aic_oversample)
+metrics_bic = get.metrics(confusion_matrix_bic_oversample)
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic)
+rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+```
+
+
+```{r echo=FALSE}
+
+## Metrics
+
+metrics_rf = get.metrics(confusion_matrix_rf)
+metrics_xg = get.metrics(confusion_matrix_xg)
+metrics_xg_cv = get.metrics(confusion_matrix_xg_cv)
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_rf, metrics_xg, metrics_xg_cv)
+rownames(metrics_combined) = c("Random Forest", "XGBOOST", "XGBOOST (Tuned)")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+```
+
+```{r echo=FALSE}
+
+## Metrics
+
+metrics_lasso = get.metrics(confusion_matrix_lasso_oversample)
+metrics_ridge = get.metrics(confusion_matrix_ridge_oversample)
+
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_lasso, metrics_ridge)
+rownames(metrics_combined) = c("Lasso", "Ridge")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+```
+## Task 2
+
+For this task, we provided a customer segmentation which is based on the CLV
+index (Customer Lifetime Value) and provides insights about groups of customers
+that the company can target with ad-hoc promotional campains in response to
+possible churns. In this way the company would be more efficient in targeting
+only customers who have a large CLV.
+
+## Loading Libraries(TO BE REMOVED)
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(skimr)
+library(readr)
+library(sf)
+library(usmap)
+library(grid)
+library(gridExtra)
+library(corrplot)
+library(caret)
+library(ROSE)
+library(factoextra)
+library(cluster)
+library(ggsci)
+```
+
+## Importing Dataset(TO BE REMOVED)
+
+```{r}
+Data <- read.csv2("path/to/TelecomChurn.csv", 
+                 header = TRUE, 
+                 sep = ",", 
+                 colClasses = "character")
+variables <- colnames(Data)
+categorical_variables <- c("State", "International.plan", "Voice.mail.plan", "Area.code")
+target_variable <- "Churn"
+numerical_variables <- setdiff(variables, c(categorical_variables, target_variable))
+```
+
+## Data Preprocessing(TO BE REMOVED)
+
+```{r}
+# Ensuring that variables are converted in the correct form
+Data[[target_variable]] <- as.factor(Data[[target_variable]])
+for (var in numerical_variables) {
+  Data[[var]] <- as.numeric(Data[[var]])
+}
+for (var in categorical_variables) {
+  Data[[var]] <- as.factor(Data[[var]])
+}
+
+# Dropping the variable used in the for loop
+rm(var)
+```
+
+## Analysis
+
+We begin by computing some indeces that we will need for the analysis. We are
+basically creating other features.
+
+### Calculating ARPU (Average Revenue Per User)
+
+The ARPU (Average Revenue Per User) is an important index that we'll use later
+to compute the CLV. This index groups all the charges for the day, eve and night.
+
+```{r}
+Data <- Data %>%
+  mutate(TotalCharges = Total.day.charge + Total.eve.charge + Total.night.charge + Total.intl.charge)
+ARPU <- mean(Data$TotalCharges)
+ARPU
+```
+
+### Calculating Total Daily Minutes
+
+This is another "summary" of the time spent by the customer using the service.
+The creation of this index is for the sole purpose of enlarging the set of 
+features that we'll use for clustering.
+
+```{r}
+Data <- Data %>%
+  mutate(Total.minutes = Total.day.minutes + Total.eve.minutes + Total.night.minutes)
+```
+
+### Customer Retention Rate
+Calculate Customer Retention Rate. Namely, the proportion of customers who did
+not churned.
+
+```{r}
+retention_rate <- 1 - mean(Data$Churn == "True")
+retention_rate
+```
+
+### Average Customer Lifespan
+Estimate Average Customer Lifespan based on the assumption that if a fraction of
+customers churn each period, then on average, a customer will stay for 1/churn 
+rate periods. Lower "Churn Rate" means higher "Customer Lifespan".
+
+```{r}
+average_lifespan <- 1 / (1 - retention_rate)
+average_lifespan
+```
+
+### Customer Lifetime Value (CLV)
+
+```{r}
+CLV <- ARPU * average_lifespan
+CLV
+```
+
+```{r}
+Data <- Data %>%
+  mutate(CLV = TotalCharges * avg_customer_lifespan)
+
+```
+
+Here we add to the Data the column "CLV".
+
+## Visualization
+
+Now that we have computed the CLV index, which is basically a summary of the
+various charges paid by each customer, we analyze it like we did for the
+other features in the EDA to gain insight about its distribution and its
+relation with some other features.
+
+### Distribution of CLV
+
+```{r}
+ggplot(Data, aes(x = CLV)) +
+  geom_histogram(binwidth = 50, fill = "#0073C2FF", color = "black", alpha = 0.7) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Distribution of Customer Lifetime Value (CLV)",
+    x = "Customer Lifetime Value (CLV)",
+    y = "Frequency"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+The distribution of the CLV seems to be normal (a little bit skewed to the
+right) the highest value is around 400,00.
+
+### CLV by Top Ten States
+
+```{r}
+# Identify the top ten most common states
+top_states <- Data %>%
+  count(State, sort = TRUE) %>%
+  top_n(10, wt = n) %>%
+  pull(State)
+
+# Filter the data to include only the top ten states
+filtered_data <- Data %>% filter(State %in% top_states)
+
+```
+
+```{r}
+# CLV by State for Top Ten States
+ggplot(filtered_data, aes(x = State, y = CLV)) +
+  geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "CLV by State (Top Ten States)",
+    x = "State",
+    y = "Customer Lifetime Value (CLV)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+It seemed interesting to us gaining insight also about the distribution of CLV 
+by the top ten states.
+
+### CLV by International Plan
+
+```{r}
+# CLV by International Plan
+ggplot(Data, aes(x = International.plan, y = CLV)) +
+  geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "CLV by International Plan",
+    x = "International Plan",
+    y = "Customer Lifetime Value (CLV)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+### Clustering
+
+In this section we build up the clustering algorithms. We are going to try two 
+clustering techniques: K-means and Hierarchical clustering. In addition we are
+using the Elbow method to identify the optimal number of clusters (k). At the
+end, we are going to choose only one method to go on with.
+
+## Clustering Features
+
+Selecting the features with which carry on the analysis. As said before, those 
+three variables are the ones that are more representative and useful for our
+purpose.
+
+```{r}
+# Select features for clustering
+features <- Data %>%
+  select(Account.length, Total.minutes, CLV)
+
+# Normalize the features
+features_scaled <- scale(features)
+```
+
+### K-Means
+
+## Elbow Method K-Means
+
+```{r}
+# Determine the optimal number of clusters using the Elbow method
+set.seed(1)
+wss <- sapply(1:10, function(k) {
+  kmeans(features_scaled, centers = k, nstart = 10)$tot.withinss
+})
+
+# Print the optimal number of clusters by identifying the elbow point
+optimal_k <- which(diff(diff(wss)) == min(diff(diff(wss)))) + 1
+
+# Create a data frame for plotting
+df <- data.frame(Clusters = 1:10, WSS = wss)
+
+# Function to plot the Elbow method
+plot_elbow_method <- function(df, optimal_k) {
+  ggplot(df, aes(x = Clusters, y = WSS)) +
+    geom_line(color = "#0073C2FF", size = 1.2) +
+    geom_point(color = "#0073C2FF", size = 3) +
+    geom_point(aes(x = optimal_k, y = WSS[optimal_k]), color = "red", size = 4) +
+    geom_text(aes(x = optimal_k, y = WSS[optimal_k], label = paste("Optimal k =", optimal_k)), 
+              color = "red", size = 5, hjust = -0.3, fontface = "bold") +
+    labs(title = "Elbow Method for Determining Optimal Number of Clusters",
+         x = "Number of Clusters",
+         y = "Total Within-Clusters Sum of Squares") +
+    theme_minimal(base_size = 15) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", color = "black"),
+      axis.title = element_text(size = 16, face = "bold", color = "black"),
+      axis.text = element_text(size = 14, face = "bold", color = "black"),
+      panel.grid.major = element_line(color = "grey80"),
+      panel.grid.minor = element_line(color = "grey90"),
+      panel.background = element_rect(fill = "whitesmoke", color = NA)
+    )
+}
+
+# Call the function to plot the Elbow method
+plot_elbow_method(df, optimal_k)
+```
+
+We found out that the optimal number of clusters is 9. 
+
+## K-Means in action
+
+```{r}
+# Apply K-means clustering with the chosen number of clusters (k = 8)
+set.seed(1)
+kmeans_result <- kmeans(features_scaled, centers = 9, nstart = 25)
+
+# Append cluster results to the original data
+Data$Cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(kmeans_result, data = features_scaled, geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
+
+```
+
+### Hierarchical Clustering
+
+Now it's the time of hierarchical.
+
+## Elbow method Hierarchical clustering
+
+```{r}
+# Compute the Distance Matrix
+distance_matrix <- dist(features_scaled)
+
+# Perform Hierarchical Clustering
+hc_result <- hclust(distance_matrix, method = "ward.D2")
+
+# Calculate the total within-cluster sum of square (wss) for different numbers of clusters
+set.seed(1)
+wss <- function(Data, max_clusters) {
+  wss_values <- numeric(max_clusters)
+  for (k in 1:max_clusters) {
+    hc <- hclust(dist(Data), method = "ward.D2")
+    cluster_assignments <- cutree(hc, k = k)
+    wss_values[k] <- sum(sapply(unique(cluster_assignments), function(cluster) {
+      cluster_data <- Data[cluster_assignments == cluster, ]
+      sum(dist(cluster_data)^2) / nrow(cluster_data)
+    }))
+  }
+  return(wss_values)
+}
+
+# Define the maximum number of clusters to consider
+max_clusters <- 10
+
+# Compute the wss for each number of clusters
+wss_values_h <- wss(features_scaled, max_clusters)
+
+# Plot the Elbow Method
+plot(1:max_clusters, wss_values_h, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters", ylab = "Within-cluster Sum of Squares", 
+     main = "Elbow Method for Finding Optimal k")
+
+# Print the optimal number of clusters by identifying the elbow point
+optimal_kh <- which(diff(diff(wss_values_h)) == min(diff(diff(wss_values_h)))) + 1
+
+points(optimal_kh, wss_values_h[optimal_kh], col = "red", pch = 19)
+text(optimal_kh, wss_values_h[optimal_kh], labels = paste("Elbow at k =", optimal_kh), pos = 4, col = "red")
+```
+
+Surprisingly we found that also for hierarchical clustering we have an optimal k
+equal to 9.
+
+## Hierarchical clustering in action
+
+```{r}
+
+# Visualize the dendrogram
+plot(hc_result, cex = 0.5, main = "Dendrogram", xlab = "", sub = "", labels = FALSE)
+rect.hclust(hc_result, k = 9, border = 2:5)
+
+cutree_result_h <- cutree(hc_result, k = 9)
+
+# Add the cluster labels to the original data
+Data$Cluster_h <- as.factor(cutree_result_h)
+
+fviz_cluster(list(data = features_scaled, cluster = cutree_result),
+             geom = "point",
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal(),
+             main = "Cluster Visualization using Hierarchical Clustering")
+
+
+```
+
+## Digression on the two methods
+
+We ended up choosing the K-means since it represents in a clearer way the
+clusters without "overlapping" (problem that we encounter adopting the 
+hierarchical method).
+
+## Analysis of the Clusters
+
+```{r}
+# Analyze cluster characteristics
+cluster_summary <- Data %>%
+  group_by(Cluster) %>%
+  summarize(across(c(Account.length, Total.minutes, CLV), mean, .names = "mean_{.col}")) %>%
+  arrange(Cluster)
+
+# Reshape the data for plotting
+cluster_summary_long <- cluster_summary %>%
+  pivot_longer(cols = starts_with("mean_"), names_to = "Metric", values_to = "MeanValue") %>%
+  mutate(Metric = factor(Metric, levels = c("mean_Account.length", "mean_Total.minutes", "mean_CLV"),
+                         labels = c("Account Length", "Total Minutes", "CLV")))
+
+# Plotting the cluster characteristics
+ggplot(cluster_summary_long, aes(x = Cluster, y = MeanValue, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Metric, scales = "free_y") +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Cluster Characteristics",
+    x = "Cluster",
+    y = "Mean Value",
+    fill = "Cluster"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+
+# Analyze the number of churned customers in each cluster
+churn_analysis <- Data %>%
+  group_by(Cluster, Churn) %>%
+  summarise(Count = n()) %>%
+  arrange(Cluster, Churn)
+
+ggplot(churn_analysis, aes(x = Cluster, y = Count, fill = Churn)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Number of Churned Customers in Each Cluster",
+    x = "Cluster",
+    y = "Number of Customers",
+    fill = "Churn Status"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+
+
+# Analyze the Avg. CLV values in each cluster
+CLV_analysis <- Data %>%
+  group_by(Cluster) %>%
+  summarise(Max_CLV = max(CLV)) %>%
+  arrange(Cluster)
+
+ggplot(CLV_analysis, aes(x = Cluster, y = Max_CLV, fill = Cluster)) +
+  geom_bar(stat = "identity") +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Maximum Customer Lifetime Value (CLV) in Each Cluster",
+    x = "Cluster",
+    y = "Maximum CLV",
+    fill = "Cluster"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+```
+
+We can see from the last two analyses that at the end 9 clusters came out. We
+also gained insight about the highest value of CLV in each cluster notice that
+the 7th cluster has the highest value overall and the number of customers
+that churned is bigger in the 7th cluster. This leads to the acknowledgement
+of the fact that the firm must adopt a certain treatment mainly to the 7th
+cluster of customers.
+
+## Conclusion
+
+This analysis highlights key insights into customer churn and CLV in the telecom 
+sector. Specific attention should be given to clusters with high churn rates and 
+high CLV for targeted retention strategies. In this way the company would save 
+money and effort, optimizing in this way promotional strategies for customer 
+retention.
+
+

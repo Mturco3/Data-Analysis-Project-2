@@ -14,8 +14,11 @@ library(ROSE)
 library(latex2exp)
 library(glmnet)
 library(rpart)
+library(pROC)
 library(rpart.plot)
 library(randomForest)
+library(dplyr)
+library(xgboost)
 library(doParallel)
 
 # Importing Dataset
@@ -1032,65 +1035,93 @@ get.metrics<- function(conf.mat) {
   return(metrics)
 }
 
-# Create a list to store every confusion matrix
+# Function to plot metrics
+plot_table = function(df) {
+  
+  table_theme = ttheme_default(
+    core = list(
+      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
+      fg_params = list(fontface = 1, fontsize = 16)
+    ),
+    colhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    ),
+    rowhead = list(
+      bg_params = list(fill = "lightblue", col = "black"),
+      fg_params = list(fontface = 2, fontsize = 18)
+    )
+  )
+  table_plot = tableGrob(df, theme = table_theme)
+  return(table_plot)
+}
 
-confusion_matrices = list()
+# Function to plot confusion matrices 
+
+plot_confusion_matrix = function(conf_matrix, title) {
+  conf_df = as.data.frame(as.table(conf_matrix))
+  colnames(conf_df) = c("Predicted", "Actual", "Freq")
+  
+  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
+    geom_tile(color = "black") +
+    geom_text(aes(label = Freq), vjust = 1) +
+    scale_fill_gradient(low = "white", high = "red") +
+    labs(title = title, x = "Predicted", y = "Actual") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.position = "none")
+}
 
 ## Baseline Logistic Regression Model
 
 #### Normal
 
+set.seed(1)
 model_baseline_logistic = glm(Churn ~ ., 
                               data = train_data_scaled, 
                               family = "binomial")
 summary(model_baseline_logistic)
 
 # Storing the results in a confusion matrix
-baseline_logistic_predictions = ifelse(predict(model_baseline_logistic, 
-                                               newdata = test_data_scaled) > 0.5, 1, 0)
-confusion_matrix_baseline_logistic = table(baseline_logistic_predictions, 
+probabilities_basline_logistic = predict(model_baseline_logistic, 
+                                               newdata = test_data_scaled,
+                                         type = "response")
+predictions_basline_logistic = ifelse( probabilities_basline_logistic > 0.5, "True", "False")
+confusion_matrix_baseline_logistic = table(predictions_basline_logistic, 
                                            test_data_scaled$Churn)
-# Dropping predictions
-rm(baseline_logistic_predictions)
-
-# Storing the c.m. in the list
-confusion_matrices[["model_baseline_logistic"]] = confusion_matrix_baseline_logistic
 
 #### Oversample
 
+set.seed(1)
 model_baseline_logistic_oversample = glm(Churn ~ ., 
                                          data = train_data_scaled_oversample, 
                                          family = "binomial")
 summary(model_baseline_logistic_oversample)
 
 # Storing the results in a confusion matrix
-baseline_logistic_predictions_oversample = ifelse(predict(model_baseline_logistic_oversample, 
-                                                          newdata = test_data_scaled_oversample) > 0.5, 1, 0)
-confusion_matrix_baseline_logistic_oversample = table(baseline_logistic_predictions_oversample, 
+probabilities_baseline_logistic_oversample = predict(model_baseline_logistic_oversample, 
+                                                          newdata = test_data_scaled_oversample,
+                                                   type = "response")
+predictions_baseline_logistic_oversample = ifelse(probabilities_baseline_logistic_oversample > 0.5, "True", "False")
+confusion_matrix_baseline_logistic_oversample = table(predictions_baseline_logistic_oversample, 
                                                       test_data_scaled_oversample$Churn)
-# Dropping predictions
-rm(baseline_logistic_predictions_oversample)
 
-# Storing the c.m. in the list
-confusion_matrices[["model_baseline_logistic_oversample"]] = confusion_matrix_baseline_logistic_oversample
 
 #### Undersample
 
+set.seed(1)
 model_baseline_logistic_undersample = glm(Churn ~ ., 
                                           data = train_data_scaled_undersample, 
                                           family = "binomial")
 
 # Storing the results in a confusion matrix
-summary(model_baseline_logistic_undersample)
-baseline_logistic_predictions_undersample = ifelse(predict(model_baseline_logistic_undersample, 
-                                                           newdata = test_data_scaled_undersample) > 0.5, 1, 0)
-confusion_matrix_baseline_logistic_undersample = table(baseline_logistic_predictions_undersample, 
-                                                       test_data_scaled_undersample$Churn)
-# Dropping predictions
-rm(baseline_logistic_predictions_undersample)
+probabilities_baseline_logistic_undersample = predict(model_baseline_logistic_undersample, 
+                                                     newdata = test_data_scaled_undersample,
+                                                     type = "response")
+predictions_baseline_logistic_undersample = ifelse(probabilities_baseline_logistic_undersample > 0.5, "True", "False")
+confusion_matrix_baseline_logistic_undersample = table(predictions_baseline_logistic_undersample, 
+                                                      test_data_scaled_undersample$Churn)
 
-# Storing the c.m. in the list
-confusion_matrices[["model_baseline_logistic_undersample"]] = confusion_matrix_baseline_logistic_undersample
 
 #### Comparisson with the simplest model (without any variable)
 
@@ -1117,6 +1148,7 @@ anova(model_0, model_baseline_logistic_oversample, test = "Chisq")
 
 #### Normal
 
+set.seed(1)
 aic_model_forward = step(glm(Churn ~ 1, 
                               family = "binomial", 
                               data = test_data_scaled), 
@@ -1171,15 +1203,15 @@ if (selected_model_name == "forward") {
 }
 
 # Computing and storing predictions on the test data
-aic_model_predictions = ifelse(predict(model_aic_final, test_data_scaled) > 0.5, 1, 0)
-confusion_matrix_aic = table(aic_model_predictions, test_data_scaled$Churn)
-confusion_matrices[["aic"]] = confusion_matrix_aic
+probabilities_aic = predict(model_aic_final, test_data_scaled, type="response")
+predictions_aic = ifelse(probabilities_aic > 0.5, "True", "False")
+confusion_matrix_aic = table(predictions_aic, test_data_scaled$Churn)
+
 
 # Dropping useless models and variables
 rm(aic_model_backward)
 rm(aic_model_both)
 rm(aic_model_forward)
-rm(aic_model_predictions)
 rm(selected_model_name)
 rm(selected_variables_aic_both)
 rm(selected_variables_aic_backward)
@@ -1246,17 +1278,17 @@ if (selected_model_name_undersample == "forward") {
   model_aic_final_undersample = aic_model_both_undersample
 }
 
-# Computing and storing predictions on the validation data
-aic_model_predictions_undersample = ifelse(predict(model_aic_final_undersample, test_data_scaled_undersample) > 0.5, 1, 0)
-confusion_matrix_aic_undersample = table(aic_model_predictions_undersample, test_data_scaled_undersample$Churn)
-confusion_matrices[["model_aic_undersample"]] = confusion_matrix_aic_undersample
+# Computing and storing predictions on the test data
+probabilities_aic_undersample = predict(model_aic_final_undersample, test_data_scaled_undersample, type="response")
+predictions_aic_undersample = ifelse(probabilities_aic_undersample > 0.5, "True", "False")
+confusion_matrix_aic_undersample = table(predictions_aic_undersample, test_data_scaled_undersample$Churn)
+
 
 # Dropping useless variables and models
 
 rm(aic_model_backward_undersample)
 rm(aic_model_both_undersample)
 rm(aic_model_forward_undersample)
-rm(aic_model_predictions_undersample)
 rm(selected_model_name_undersample)
 rm(selected_variables_aic_both_undersample)
 rm(selected_variables_aic_backward_undersample)
@@ -1321,10 +1353,11 @@ if (selected_model_name_oversample == "forward") {
   model_aic_final_oversample = aic_model_both_oversample
 }
 
-# Computing and storing predictions on the validation data
-aic_model_predictions_oversample = ifelse(predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
-confusion_matrix_aic_oversample = table(aic_model_predictions_oversample, test_data_scaled_oversample$Churn)
-confusion_matrices[["aic_oversample"]] = confusion_matrix_aic_oversample
+# Computing and storing predictions on the test data
+probabilities_aic_oversample = predict(model_aic_final_oversample, test_data_scaled_oversample, type = "response")
+predictions_aic_oversample = ifelse(probabilities_aic_oversample> 0.5, 1, 0)
+confusion_matrix_aic_oversample = table(predictions_aic_oversample, test_data_scaled_oversample$Churn)
+
 
 rm(aic_model_backward_oversample)
 rm(aic_model_both_oversample)
@@ -1398,14 +1431,14 @@ if (selected_model_name_bic == "forward") {
 }
 
 # Computing and storing predictions on the test data
-bic_model_predictions = ifelse(predict(model_bic_final, test_data_scaled, type = "response") > 0.5, 1, 0)
-confusion_matrix_bic = table(bic_model_predictions, test_data_scaled$Churn)
-confusion_matrices[["bic_model"]] = confusion_matrix_bic
+probabilities_bic = predict(model_bic_final, test_data_scaled, type = "response")
+predictions_bic = ifelse(probabilities_bic > 0.5, 1, 0)
+confusion_matrix_bic = table(predictions_bic, test_data_scaled$Churn)
+
 
 rm(bic_model_backward)
 rm(bic_model_both)
 rm(bic_model_forward)
-rm(bic_model_predictions)
 rm(selected_model_name_bic)
 rm(selected_variables_bic_both)
 rm(selected_variables_bic_backward)
@@ -1473,14 +1506,14 @@ if (selected_model_name_bic_undersample == "forward") {
 }
 
 # Computing and storing predictions on the test data
-bic_model_predictions_undersample = ifelse(predict(model_bic_final_undersample, test_data_scaled_undersample, type = "response") > 0.5, 1, 0)
-confusion_matrix_bic_undersample = table(bic_model_predictions_undersample, test_data_scaled_undersample$Churn)
-confusion_matrices[["model_bic_undersample"]] = confusion_matrix_bic_undersample
+probabilities_bic_undersample = predict(model_bic_final_undersample, test_data_scaled_undersample, type = "response")
+predictions_bic_undersample = ifelse(probabilities_bic_undersample > 0.5, 1, 0)
+confusion_matrix_bic_undersample = table(predictions_bic_undersample, test_data_scaled_undersample$Churn)
+
 
 rm(bic_model_backward_undersample)
 rm(bic_model_both_undersample)
 rm(bic_model_forward_undersample)
-rm(bic_model_predictions_undersample)
 rm(selected_model_name_bic_undersample)
 rm(selected_variables_bic_both_undersample)
 rm(selected_variables_bic_backward_undersample)
@@ -1549,15 +1582,13 @@ if (selected_model_name_bic_oversample == "forward") {
 }
 
 # Computing and storing predictions on the validation data
-bic_model_predictions_oversample = ifelse(predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response") > 0.5, 1, 0)
-confusion_matrix_bic_oversample = table(bic_model_predictions_oversample, test_data_scaled_oversample$Churn)
-print(confusion_matrix_bic_oversample)
-confusion_matrices[["bic_oversample"]] = confusion_matrix_bic_oversample
+probabilities_bic_oversample = predict(model_bic_final_oversample, test_data_scaled_oversample, type = "response")
+predictions_bic_oversample = ifelse(probabilities_bic_oversample > 0.5, 1, 0)
+confusion_matrix_bic_oversample = table(predictions_bic_oversample, test_data_scaled_oversample$Churn)
 
 rm(bic_model_backward_oversample)
 rm(bic_model_both_oversample)
 rm(bic_model_forward_oversample)
-rm(bic_model_predictions_oversample)
 rm(selected_model_name_bic_oversample)
 rm(selected_variables_bic_both_oversample)
 rm(selected_variables_bic_backward_oversample)
@@ -1573,19 +1604,6 @@ rm(variable)
 ### Confusion matrices
 
 # Function to plot confusion matrices 
-
-plot_confusion_matrix <- function(conf_matrix, title) {
-  conf_df <- as.data.frame(as.table(conf_matrix))
-  colnames(conf_df) <- c("Predicted", "Actual", "Freq")
-  
-  ggplot(data = conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
-    geom_tile(color = "black") +
-    geom_text(aes(label = Freq), vjust = 1) +
-    scale_fill_gradient(low = "white", high = "red") +
-    labs(title = title, x = "Predicted", y = "Actual") +
-    theme_minimal() +
-    theme(plot.title = element_text(hjust = 0.5))
-}
 
 # Create the plots
 baseline_plot = plot_confusion_matrix(confusion_matrix_baseline_logistic_oversample, "Baseline Model")
@@ -1610,29 +1628,6 @@ rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
 # Round the metrics to 2 decimal places
 metrics_combined = round(metrics_combined, 4)
 
-
-# Print the metrics
-print(metrics_combined)
-
-plot_table = function(df) {
-  
-  table_theme = ttheme_default(
-    core = list(
-      bg_params = list(fill = c(rep(c("white"), each = nrow(df)), NA), col = "black"),
-      fg_params = list(fontface = 1, fontsize = 16)
-    ),
-    colhead = list(
-      bg_params = list(fill = "lightblue", col = "black"),
-      fg_params = list(fontface = 2, fontsize = 18)
-    ),
-    rowhead = list(
-      bg_params = list(fill = "lightblue", col = "black"),
-      fg_params = list(fontface = 2, fontsize = 18)
-    )
-  )
-  table_plot = tableGrob(df, theme = table_theme)
-  return(table_plot)
-}
 
 # Create the table plot
 grid.newpage()
@@ -1661,6 +1656,7 @@ roc_bic = roc(test_data$Churn,
                       type = "response"), 
               plot = TRUE, main = "BIC Model", col = "green", lwd = 3, 
               auc.polygon = TRUE, print.auc = TRUE)
+par(mfrow=c(1,1))
 
 
 ## LASSO REGULARIZATION
@@ -1681,8 +1677,6 @@ colors = sample(1:length(predictor_names))
 plot(fit, xvar = "lambda", label = TRUE, col = colors)
 legend("topright", legend = predictor_names, col = colors, lty = 1, cex = 0.5, text.width = 1.2)
 
-str(train_data_scaled)
-sum(is.na(train_data_scaled))
 
 # Train the Lasso regression model with hyperparameter tuning (lamda) and cross validation
 model_lasso = train(Churn ~ ., 
@@ -1704,9 +1698,10 @@ best_parameters_lasso = model_lasso$bestTune$lambda
 cat("The highest value of accuracy:", best_accuracy_lasso, "is obtianed with lambda =", best_parameters_lasso)
 
 # Computing and storing predictions
-predictions_lasso = predict(model_lasso, test_data_scaled)
+probabilities_lasso = predict(model_lasso, test_data_scaled, type="prob")[,"True"]
+predictions_lasso = ifelse(probabilities_lasso > 0.5, "True", "False")
 confusion_matrix_lasso = table(predictions_lasso, test_data_scaled$Churn)
-confusion_matrices[["lasso_model"]] = confusion_matrix_lasso
+
 
 # Dropping useless variables 
 rm(colors)
@@ -1714,7 +1709,6 @@ rm(predictor_names)
 rm(fit)
 rm(best_accuracy_lasso)
 rm(best_parameters_lasso)
-rm(predictions_lasso)
 
 #### Undersample
 
@@ -1750,10 +1744,11 @@ best_parameters_lasso_undersample = model_lasso_undersample$bestTune$lambda
 cat("The highest value of accuracy:", best_accuracy_lasso_undersample, "is obtained with lambda =", best_parameters_lasso_undersample, "\n")
 
 # Computing and storing predictions
-predictions_lasso_undersample = predict(model_lasso_undersample, test_data_scaled_undersample)
+probabilities_lasso_undersample = predict(model_lasso_undersample, test_data_scaled_undersample, type="prob")[,"True"]
+predictions_lasso_undersample = ifelse(probabilities_lasso_undersample > 0.5, "True", "False")
 confusion_matrix_lasso_undersample = table(predictions_lasso_undersample, test_data_scaled_undersample$Churn)
-confusion_matrices[["lasso_model_undersample"]] = confusion_matrix_lasso_undersample
-print(confusion_matrices[["lasso_model_undersample"]])
+
+
 
 # Clean up variables
 rm(colors_undersample)
@@ -1761,11 +1756,11 @@ rm(predictor_names_undersample)
 rm(fit_undersample)
 rm(best_accuracy_lasso_undersample)
 rm(best_parameters_lasso_undersample)
-rm(predictions_lasso_undersample)
 
 
 #### Oversample
 
+set.seed(1)
 # Train the Lasso regression model on the oversampled data
 X_train_oversample = train_data_scaled_oversample
 Y_train_oversample = as.numeric(X_train_oversample$Churn)
@@ -1799,22 +1794,29 @@ best_parameters_lasso_oversample = model_lasso_oversample$bestTune$lambda
 cat("The highest value of accuracy:", best_accuracy_lasso_oversample, "is obtained with lambda =", best_parameters_lasso_oversample, "\n")
 
 # Computing and storing predictions
-predictions_lasso_oversample = predict(model_lasso_oversample, test_data_scaled_oversample)
+probabilities_lasso_oversample = predict(model_lasso_oversample, test_data_scaled_oversample, type = "prob")[, "True"]
+predictions_lasso_oversample = ifelse(probabilities_lasso_oversample > 0.5, "True", "False")
 confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_data_scaled_oversample$Churn)
-confusion_matrices[["lasso_model_oversample"]] = confusion_matrix_lasso_oversample
 
 rm(colors_oversample)
 rm(predictor_names_oversample)
 rm(fit_oversample)
 rm(best_accuracy_lasso_oversample)
 rm(best_parameters_lasso_oversample)
-rm(predictions_lasso_oversample)
 
 ## RIDGE REGRESSION
 
 ### Normal Data
 
 set.seed(1)
+
+ridge_fit = glmnet(x = X_train,
+                    y = Y_train,
+                    alpha = 0)
+print(ridge_fit)
+plot(ridge_fit,
+     label = T, 
+     xvar = "lambda")
 
 model_ridge = train(Churn ~ ., 
               data = train_data_scaled, 
@@ -1837,8 +1839,95 @@ ridge.plot = model_ridge %>%
   )
 ridge.plot
 
-predictions_rige = predict(model_ridge, test_data_scaled)
-confusion_matrix_ridge = table(predictions_rige, test_data_scaled$Churn)
+probabilities_ridge = predict(model_ridge, test_data_scaled, type="prob")[,"True"]
+predictions_ridge = ifelse(probabilities_ridge > 0.5, "True", "False")
+confusion_matrix_ridge = table(predictions_ridge, test_data_scaled$Churn)
+
+#### Oversample Data
+
+set.seed(1)
+model_ridge_oversample = glmnet(x = X_train_oversample,
+                              y = Y_train_oversample,
+                              alpha = 0)
+
+plot(model_ridge_oversample,
+     label = F, 
+     xvar = "lambda") 
+
+legend("topright", legend = colnames(X_train_oversample), 
+       col = 1:ncol(X_train_oversample), lty = 1, cex = 0.6)
+
+model_ridge_oversample = train(Churn ~ ., 
+                               data = train_data_scaled_oversample, 
+                               method = "glmnet", 
+                               metric = "Accuracy", 
+                               trControl = trainControl(method = "cv", number = 10), 
+                               tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+
+model_ridge_oversample %>% 
+  ggplot(aes(x = lambda, y = Accuracy)) + 
+  geom_line() + 
+  geom_point() +
+  geom_text(aes(label = sprintf("%.3f", Accuracy)), check_overlap = TRUE, vjust = -0.5, size = 2.5) + 
+  labs(x = TeX("Lambda ($\\lambda$)"), y = "Accuracy", title = "Accuracy vs. Lambda for Ridge Regularization") +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+cat("The highest accuracy is:", max(model_ridge_oversample$results$Accuracy),
+    "with parameter lambda =", model_ridge_oversample$bestTune$lambda)
+
+probabilities_ridge_oversample = predict(model_ridge_oversample, test_data_scaled_oversample, 
+                                         type = "prob")[,"True"]
+predictions_ridge_oversample = ifelse(probabilities_ridge_oversample > 0.5, "True", "False")
+confusion_matrix_ridge_oversample = table(predictions_ridge_oversample, test_data_scaled_oversample$Churn)
+
+# Comparisson between Tree based models
+
+## Confusion matrices
+
+# Create the plots
+lasso_plot = plot_confusion_matrix(confusion_matrix_lasso_oversample, "Lasso")
+ridge_plot = plot_confusion_matrix(confusion_matrix_ridge_oversample, "Ridge")
+
+
+# Arrange the plots in a single layout
+grid.arrange(lasso_plot, ridge_plot, ncol = 2, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+## Metrics
+
+metrics_lasso = get.metrics(confusion_matrix_lasso_oversample)
+metrics_ridge = get.metrics(confusion_matrix_ridge_oversample)
+
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_lasso, metrics_ridge)
+rownames(metrics_combined) = c("Lasso", "Ridge")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+## ROC
+
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,2)) # 3 rows, 1 column layout for confusion matrices
+roc_lasso = roc(test_data$Churn, probabilities_lasso_undersample, 
+             plot = TRUE, main = "Lasso", col = "blue", lwd = 3, 
+             auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+              probabilities_ridge_oversample, 
+              plot = TRUE, main = "Ridge", col = "red", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+par(mfrow=c(1,1))
+
+
 
 
 ## RANDOM FORESTS
@@ -1943,15 +2032,11 @@ confusion_matrices[["random_forest_undersample"]] = confusion_matrix_random_fore
 
 #### Oversample data
 
-# Assuming `train_data_oversample` is your oversampled dataset
-
 set.seed(1)
 random_forest_model_oversample = randomForest(Churn ~ ., data = train_data_oversample, 
-                                              mtry = 5, 
+                                              mtry = 4, 
                                               ntree = 500, 
                                               importance = T)
-print(random_forest_model_oversample)
-importance(random_forest_model_oversample)
 
 # Storing the error rate matrix
 error_rate_matrix_oversample = random_forest_model_oversample$err.rate
@@ -1991,100 +2076,10 @@ confusion_matrix_random_forest_oversample = table(prediction_oversample, test_da
 
 confusion_matrices[["random_forest_oversample"]] = confusion_matrix_random_forest_oversample
 
-## XGBoosting
-
-# In the first place we train the algorithm without tuning
-model_xg = xgboost(as.matrix(X_train), label = Y_train, 
-                 nrounds = 50, 
-                 objective = "binary:logistic", 
-                 eval_metric = "error")
-
-# We then consider its performance
-xg.pred <- ifelse(predict(fit.xg, X_test)> 0.5, 1, 0)
-mean(xg.pred != Y_test)
-print(table(xg.pred, test_data$Churn))
-get.metrics(table(xg.pred, test_data$Churn))
-
-# Just to get an insight on the relevance of the parameter ntreelimit, we consider the error
-# on the test set. It is important to state that this is not a process to train the model but just
-# an analysis on the parameter since models cannot be trained on the test set
-train_errors = fit.xg$evaluation_log$train_error
-val_errors <- numeric(50)
-
-for (j in 1:50) {
-  pred_j <- ifelse(predict(fit.xg, X_test, ntreelimit = j) > 0.5, 1, 0)
-  val_errors[j] <- mean(pred_j != Y_test)
-}
-
-# Plot the error rates
-plot(1:50, val_errors, type = "b", xlab = "Number of trees", ylab = "Error", col = 3, ylim = c(0, 0.3), cex = 0.5)
-points(1:50, train_errors, type = "b", cex = 0.5)
-legend("topright", legend = c("Train", "Test"), col = c(1, 3), lty = 1, lwd = 2, cex = 0.7)
-
-# Identify the number of trees with the minimum validation error
-optimal_trees <- which.min(val_errors)
-abline(v = optimal_trees, col = "red")
-
-# Print optimal number of trees
-print(paste("Optimal number of trees:", optimal_trees))
-
-fitControl <- trainControl(
-  method = "repeatedcv",
-  number = 10,
-  repeats = 10,
-  search = "random"
-)
-
-# Parallel processing setup
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
-
-tune_grid <- expand.grid(
-  nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
-  eta = 0.3,
-  max_depth = 5,
-  subsample = 1,
-  colsample_bytree = 1,
-  min_child_weight = 5,
-  gamma = c(0.1, 0.2, 0.5, 0.75, 1)
-)
-
-set.seed(1)
-fit_xg_cv <- train(
-  Churn ~ ., data = train_data_oversample, 
-  method = "xgbTree", 
-  trControl = fitControl,
-  verbose = FALSE, 
-  tuneGrid = tune_grid,
-  objective = "binary:logistic", 
-  eval_metric = "error"
-)
-
-# Stop parallel processing
-stopCluster(cl)
-
-# Plot the cross-validation results
-trellis.par.set(caretTheme())
-plot(fit_xg_cv)
-
-# Predictions on the test set using the best model
-pred_xg_cv <- predict(fit_xg_cv, test_data, type = "raw")
-
-# Compute the confusion matrix
-confusion_matrix <- table(pred_xg_cv, test_data$Churn)
-print(confusion_matrix)
-
-# Calculate the mean error
-mean_error <- mean(pred_xg_cv != test_data$Churn)
-print(paste("Mean error rate:", mean_error))
-
-library(randomForest)
-library(dplyr)
-
-# -------------------------
+### ALTERNATIVE TUNING (ONLY UNDERSAMPLE CONSIDERED)
 
 # Create a random sample of hyperparameter combinations
-set.seed(123)
+set.seed(1)
 hyperparameter_grid <- expand.grid(
   n_tree = c(400,450,500,550,600),
   m_try = 1:12,
@@ -2093,8 +2088,7 @@ hyperparameter_grid <- expand.grid(
 )
 
 # Sample a smaller grid for random search
-sampled_grid = hyperparameter_grid %>% sample_n(50)
-
+sampled_grid = hyperparameter_grid %>% sample_n(10)
 
 # Evaluate all combinations
 results_random_forest_tuning = data.frame()
@@ -2110,21 +2104,20 @@ for (i in 1:nrow(sampled_grid)) {
     nodesize = params$node_size,
     importance = TRUE
   )
+  # Calculate the mean error rate
+  mean_err_rate = mean(rf_model$err.rate[, 1])
+  print(mean_err_rate)
+  
   # Appending the results in the dataframe
-  print(mean(rf_model$err.rate[, 1]))
   results_random_forest_tuning = rbind(results_random_forest_tuning,
-                                       cbind(params, mean(rf_model$err.rate[, 1])))
+                                       cbind(params, mean_err_rate))
 }
 
 # Find the best parameters
-best_parameters = results %>%
-  filter(oob_error == min(oob_error)) %>%
-  slice(1)
+best_parameters_random_forest = results_random_forest_tuning %>%
+  filter(mean_err_rate == min(mean_err_rate))
 
-# Retrieving best combination of parameters
-best_parameters_random_forest = results[1, ]
 print(best_parameters_random_forest)
-
 
 # Train the final model with the best parameters
 final_rf_model <- randomForest(
@@ -2138,12 +2131,140 @@ final_rf_model <- randomForest(
 )
 
 # Make predictions on the test set
-pred_rf = predict(final_rf_model, test_data)
+probabilities_rf = predict(final_rf_model, test_data, type = "prob")[, "True"]
+predictions_rf = ifelse(probabilities_rf_positive > 0.5, 1, 0)
 confusion_matrix_rf = table(pred_rf, test_data$Churn)
-print(confusion_matrix_rf)
 
-# Calculate and print the mean error
-mean_error_rf <- mean(pred_rf != test_data$Churn)
-print(paste("Mean error rate:", mean_error_rf))
+
+## XGBoosting
+
+# Create dummy variables for the data
+X_train_oversample_dummy = dummyVars(Churn ~ ., data = train_data_oversample) %>% predict(train_data_oversample)
+Y_train_oversample_dummy = train_data_oversample$Churn %>% as.numeric(.) - 1
+X_test_oversample_dummy = dummyVars(Churn ~ ., data = test_data) %>% predict(test_data)
+Y_test_oversample_dummy = test_data$Churn %>% as.numeric(.) - 1
+
+# In the first place we train the algorithm without tuning
+model_xg = xgboost(as.matrix(X_train_oversample_dummy), label = Y_train_oversample_dummy, 
+                 nrounds = 50, 
+                 objective = "binary:logistic", 
+                 eval_metric = "error")
+
+# We then consider its performance
+probabilities_xg = predict(model_xg, X_test_oversample_dummy)
+predictions_xg = ifelse(probabilities_xg> 0.5, 1, 0)
+confusion_matrix_xg = table(predictions_xg, test_data$Churn)
+
+
+# Just to get an insight on the relevance of the parameter ntreelimit, we consider the error
+# on the test set. It is important to state that this is not a process to train the model but just
+# an analysis on the parameter since models cannot be trained on the test set
+train_errors = model_xg$evaluation_log$train_error
+val_errors = numeric(50)
+
+for (j in 1:50) {
+  pred_j = ifelse(predict(model_xg, X_test_oversample_dummy)> 0.5, 1, 0)
+  val_errors[j] <- mean(pred_j != Y_test_oversample_dummy)
+}
+
+# Plot the error rates
+plot(1:50, val_errors, type = "b", xlab = "Number of trees", ylab = "Error", col = 3, ylim = c(0, 0.3), cex = 0.5)
+points(1:50, train_errors, type = "b", cex = 0.5)
+legend("topright", legend = c("Train", "Test"), col = c(1, 3), lty = 1, lwd = 2, cex = 0.7)
+
+
+
+
+# Parallel processing setup
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+tune_grid <- expand.grid(
+  nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+  eta = 0.3,
+  max_depth = 5,
+  subsample = 1,
+  colsample_bytree = 1,
+  min_child_weight = 5,
+  gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+)
+
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 10,
+  search = "random"
+)
+
+set.seed(1)
+model_xg_cv <- train(
+  Churn ~ ., data = train_data_oversample, 
+  method = "xgbTree", 
+  trControl = fitControl,
+  verbose = FALSE, 
+  tuneGrid = tune_grid,
+  objective = "binary:logistic", 
+  eval_metric = "error"
+)
+
+# Stop parallel processing
+stopCluster(cl)
+
+# Plot the cross-validation results
+trellis.par.set(caretTheme())
+plot(model_xg_cv)
+
+# Predictions on the test set using the best model
+probabilities_xg_cv = predict(model_xg_cv, test_data, type = "prob")[,"True"]
+predictions_xg_cv = ifelse(probabilities_xg_cv > 0.5, 1, 0)
+confusion_matrix_xg_cv = table(predictions_xg_cv, test_data$Churn)
+
+# Comparisson between Tree based models
+
+## Confusion matrices
+
+# Create the plots
+rf_plot = plot_confusion_matrix(confusion_matrix_rf, "Random Forest")
+xg_plot = plot_confusion_matrix(confusion_matrix_xg, "XGBOOST")
+xg_cv_plot = plot_confusion_matrix(confusion_matrix_xg_cv, "XGBOOST (Tuned)")
+
+# Arrange the plots in a single layout
+grid.arrange(rf_plot, xg_plot, xg_cv_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
+
+## Metrics
+
+metrics_rf = get.metrics(confusion_matrix_rf)
+metrics_xg = get.metrics(confusion_matrix_xg)
+metrics_xg_cv = get.metrics(confusion_matrix_xg_cv)
+
+# Combine metrics into a single data frame
+metrics_combined = rbind(metrics_rf, metrics_xg, metrics_xg_cv)
+rownames(metrics_combined) = c("Random Forest", "XGBOOST", "XGBOOST (Tuned)")
+
+# Round the metrics to 2 decimal places
+metrics_combined = round(metrics_combined, 4)
+
+# Create the table plot
+grid.newpage()
+grid.draw(plot_table(metrics_combined))
+
+## ROC
+
+# Compute ROC curves
+
+library(pROC)
+par(mfrow=c(1,3)) # 3 rows, 1 column layout for confusion matrices
+roc_rf = roc(test_data$Churn, probabilities_rf, 
+                   plot = TRUE, main = "Random Forest", col = "blue", lwd = 3, 
+                   auc.polygon = TRUE, print.auc = TRUE)
+roc_aic = roc(test_data$Churn, 
+              probabilities_xg, 
+              plot = TRUE, main = "XGBOOST", col = "red", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+roc_bic = roc(test_data$Churn, 
+              probabilities_xg_cv, 
+              plot = TRUE, main = "XGBOOST (Tuned)", col = "purple", lwd = 3, 
+              auc.polygon = TRUE, print.auc = TRUE)
+par(mfrow=c(1,1))
 
 
