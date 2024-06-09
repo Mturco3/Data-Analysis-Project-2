@@ -1,8 +1,8 @@
 ---
-title: "Final Project Data Analysis for Business -"
+title: "Final Project Data Analysis for Business - "
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -28,23 +28,31 @@ library(doParallel)
 library(pROC)
 library(knitr)
 library(xgboost)
+library(factoextra)
+library(cluster)
+library(ggsci)
+library(knitr)
+library(RColorBrewer)
+#
 
 ```
 
-# STATBIZ
+# STATBIZ {.tabset .tabset-fade}
 
 Group members:
 
 -   Michele Turco (285251)
--   Giulio Presaghi
--   Edoardo Brown
--   Irene Benvenuti
+-   Giulio Presaghi(287611)
+-   Edoardo Brown (281671)
+-   Irene Benvenuti (288521)
 
-## GOAL OF THE ANALYSIS
+## TASK 1 {.tabset .tabset-fade}
 
-## DATASET DESCRIPTION
+The dataset under analysis is the "Telecom Churn" dataset, which includes data about a US Telecom company. Our primary goal is to predict customer churn to help the company take proactive steps to retain clients. In a real-world context, understanding this target variable is crucial for businesses aiming to improve customer retention. 'Churn' signifies customers who have ended their relationship with the company, while 'Not churn' indicates those who continue to engage with the company’s services or products. By identifying customers at high risk of leaving, the company can strategically offer promotions and incentives to enhance customer retention and reduce churn rates.
 
-### Importing the dataset
+### DATASET DESCRIPTION
+
+#### Importing the dataset
 
 The dataset consists of 3333 observations with 20 variables related to telecom customer attributes, such as state, account length, service usage details, and whether the customer churned or not. In particular, we can see that there are 15 numerical variables and 5 categorical variables.
 
@@ -73,7 +81,7 @@ for (var in categorical_variables) {
 str(Data)
 ```
 
-### Cleaning the dataset
+#### Cleaning the dataset
 
 The dataset does not contain any missing value and hence this is not an issue that need to be addressed.
 
@@ -91,16 +99,17 @@ In addition, the dataset does not present any duplicated value and consequently 
 ```{r echo=FALSE}
 # Counting duplicates row and printing the result
 duplicates = sum(duplicated(Data))
-print(paste("There are", duplicates, "duplicates rows in the Dataset"))
+cat("There are", duplicates, "duplicates rows in the Dataset before preprocessing")
 ```
 
-## EDA
+### EDA {.tabset .tabset-fade}
 
 Exploratory Data Analysis (EDA) is a crucial step in understanding the underlying patterns and relationships within the dataset. Through this analysis, we aim to gain insights that will inform the subsequent steps of data preprocessing and model building.
+We will consider categorical variables (excluding the state variable because of its nature) and numerical variables, for which we computed a correlation matrix.
 
-### Target variable distribution
+#### Target variable distribution
 
-We first consider our target variable "Churn" and its distribution. To do this, we will plot both a histogram to visualize the number of observations for each class and a pie chart to better understand their proportions in the dataset.
+In this section we consider our target variable "Churn" and its distribution. To do this, we will plot both a histogram to visualize the number of observations for each class and a pie chart to better understand their proportions in the dataset. 
 
 ```{r include=FALSE}
 
@@ -148,17 +157,16 @@ piechart_plot = ggplot(data = churn_distribution, aes(x = "", y = proportion, fi
 # Representing the plots
 
 grid.arrange(
-  arrangeGrob(histogram_plot, piechart_plot, nrow = 1, ncol = 2),
-  top = textGrob("Target Variable Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+  arrangeGrob(histogram_plot, piechart_plot, nrow = 1, ncol = 2)
 )
 
 ```
 
 The histogram on the left shows that there are 2850 customers who did not churn (False) and 483 customers who did churn (True). The pie chart on the right indicates that 86% of customers did not churn, while 14% did churn. This highlights an significance imbalance in the dataset, with an higher number of customers not churning compared to those who do.
 
-### Categorical variables distribution
+#### Categorical variables
 
-In order to get more insightful results in the analysis of the distribution of categorical variables, we firstly plot the proportion of each class in a pie chart (as we did before with our target variable).
+In this section we analyze the categorical variables in our dataset. In order to get more insightful results in the analysis of the distribution of categorical variables, we firstly plot the proportion of each class in a pie chart (as we did before with our target variable).
 
 ```{r include=FALSE}
 # Code used in order to generate the plots
@@ -238,8 +246,7 @@ for (variable in categorical_variables) {
 ```{r echo=FALSE}
 # Display the first plot
 grid.arrange(
-  arrangeGrob(grobs = plot_list, nrow = 2, ncol = 2),
-  top = textGrob("Categorical Variables Distribution", gp = gpar(fontsize = 20, fontface = "bold"))
+  arrangeGrob(grobs = plot_list, nrow = 2, ncol = 2)
 )
 ```
 
@@ -250,7 +257,7 @@ Furthermore, we wanted to highlight the distribution of customer churn across th
 ```{r echo=FALSE}
 grid.arrange(
   arrangeGrob(grobs = plot_list_relationship, nrow = 1, ncol = 3),
-  top = textGrob("Churn Distribution Across Categorical Variables", gp = gpar(fontsize = 20, fontface = "bold"), just = "center"),
+  top = textGrob("Churn Distribution Across Categorical Variables", gp = gpar(fontsize = 10, fontface = "bold"), just = "center"),
   right = legend,
   left = "Count"
 )
@@ -282,7 +289,7 @@ print(chi_squared_test)
 
 X-squared = 222.57 is the test statistic value, which measures the discrepancy between the observed and expected frequencies. The extremely small p-value (\< 2.2e-16) indicates that the probability of observing such a discrepancy by random chance is very low. Since the p-value is much smaller than the conventional significance level (e.g., 0.05), the null hypothesis is rejected, suggesting that there is a statistically significant association between the two categorical variables in the dataset. In other words, the data provides strong evidence that the variables are not independent and that there is a significant relationship between them.
 
-#### State variable
+##### State variable
 
 Due to its particularly high number of levels (51), we decided to analyze this variable differently from other categorical variables. A "classic" plot would not have been as insightful. Therefore, we plotted the churn rate across USA states directly on a map, (after ensuring rthat observations were balanced between states). This approach provides a clearer understanding of whether the variable distribution varies by state.
 
@@ -313,6 +320,8 @@ Data$ChurnNumeric = NULL
 ```
 
 The plot indicates that the churn rate distribution does vary significantly across states. For example, California (CA) and Texas (TX) exhibit higher churn rates, indicated by the deep red shading (25%, as shown in the legend), suggesting that a substantial proportion of customers in these states are leaving the service. In contrast, states like Alaska (AK) and Iowa (IA), shaded in blue, have much lower churn rates (\<10%), indicating better customer retention.
+
+Reference -> https://youtu.be/Hi3fXGRBCMA?si=LfPkHpsmNk6cQ_hZ
 
 ##### Chi squared test on State and Churn
 
@@ -397,9 +406,8 @@ for (variable in numerical_variables) {
 
 ```
 
-We decided to follow a similar approach as the one with categorical variables. We firstly plotted histograms that showed the distribution of the data and then we considered their relationship with the target variable.
 
-```{r fig.width=10, fig.height=10, echo=FALSE, warning=FALSE}
+```{r fig.width=10, fig.height=10, echo=FALSE, warning=FALSE, include=FALSE}
 
 grid.arrange(
   arrangeGrob(grobs = plot_list_numerical, nrow = 5, ncol = 3),
@@ -408,7 +416,6 @@ grid.arrange(
 
 ```
 
-The histograms reveal that several variables, such as Account length, Total day minutes, and Total night charge, exhibit relatively symmetric distributions approximating normality. In contrast, variables like Number vmail messages and Customer service calls display right skewness, where most values are low with a few higher values. Notably, Number vmail messages and Total intl calls have significant zero values, suggesting under utilization of these services. The red dashed lines represent the means, indicating the central tendency for each variable.
 
 ```{r fig.width=10, fig.height=10, echo=FALSE, warning=FALSE}
 
@@ -420,12 +427,9 @@ grid.arrange(
 )
 
 ```
+The histograms reveal that several variables, such as Account length, Total day minutes, and Total night charge, exhibit relatively symmetric distributions approximating normality. In contrast, variables like Number vmail messages and Customer service calls display right skewness, where most values are low with a few higher values. Notably, Number vmail messages and Total intl calls have significant zero values, suggesting under utilization of these services. The red dashed lines represent the means, indicating the central tendency for each variable.
 
-Across most variables, the proportion of customers who churn (red) is relatively small compared to those who do not churn (blue), consistent with the overall churn rate in the dataset.
-
-For Customer service calls, the churn proportion noticeably increases with higher values, suggesting that frequent contact with customer service may indicate dissatisfaction leading to churn.
-
-In Total day minutes, customers with very high usage show a slightly higher churn rate, potentially due to issues related to usage limits or service quality.
+Across most variables, the proportion of customers who churn (red) is relatively small compared to those who do not churn (blue), consistent with the overall churn rate in the dataset. For Customer service calls, the churn proportion noticeably increases with higher values, suggesting that frequent contact with customer service may indicate dissatisfaction leading to churn. In Total day minutes, customers with very high usage show a slightly higher churn rate, potentially due to issues related to usage limits or service quality.
 
 Consequently, we decided to better explore the relationships between the target variable and these two categorical variables.
 
@@ -483,7 +487,7 @@ summary(anova_service_calls)
 
 In this case, the ANOVA results show a highly significant effect of the churn status on the continuous variable, with a very low p-value (\< 2e-16). This indicates a significant difference in the means of the continuous variable between customers who churn and those who do not. The high F value (151.8) suggests that the churn status explains a substantial portion of the variability in the continuous variable, more so than indicated by the previous ANOVA results.
 
-### Correlation Analysis
+#### Correlation Analysis
 
 In this section, we measure the correlation between numerical variables. Correlation is a statistical measure that describes the extent to which two variables change together. It is particularly relevant since collinearity, or multicollinearity, occurs when two or more predictor variables in a dataset are highly correlated. This means that these variables share similar information and move together in a predictable way. We will deal later with this aspect.
 
@@ -503,11 +507,12 @@ corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
 
 This correlation matrix shows the relationships between various numerical variables in the dataset. It reveals that no variables are strongly correlated with each other. However, there are some variables that are essentially the same quantity, such as Total day minutes and Total day charge, Total eve minutes and Total eve charge, and Total night minutes and Total night charge, as indicated by their perfect or near-perfect correlations (correlation coefficients close to 1). This is because the total charge for each type is computed by multiplying the total minutes by a constant (or nearly constant) factor. For instance, in the case of day charge, the factor is 0.17. Hence, these pairs of variables provide the same information.
 
-## Preprocessing
+### PREPROCESSING {.tabset .tabset-fade}
 
-### Dealing with collinearity
+#### Dealing with collinearity
 
-As stated above, considering collinearity and correlations is crucial in classification problems because highly correlated variables can lead to redundancy and affect the model's performance. When predictors are highly correlated, they may provide overlapping information, which can complicate the model's ability to learn effectively and can also inflate the importance of certain features. By identifying and addressing these correlations, we can simplify the model, improve its interpretability, and enhance its predictive performance. Consequently, we proceed in removing variables that are highly correlated to others.
+As stated during our EDA, considering collinearity and correlations is crucial in classification problems because highly correlated variables can lead to redundancy and affect the model's performance. When predictors are highly correlated, they may provide overlapping information, which can complicate the model's ability to learn effectively and can also inflate the importance of certain features. By identifying and addressing these correlations, we can simplify the model, improve its interpretability, and enhance its predictive performance. Consequently, we proceed in removing variables that are highly correlated to others.
+
 
 ```{r echo=FALSE}
 
@@ -540,9 +545,13 @@ for (variable in variables_to_drop) {
 
 ```
 
-### Dealing with categorical variable with too many levels
+#### Dealing with categorical variable with too many levels
 
 Having a categorical variable with too many levels in the dataset can increase model complexity, lead to overfitting, reduce computational efficiency, and make the model harder to interpret. In our case, the variable State has too many levels and hence needs to be preprocessed to reduce its dimension. After some research, we found that since 1950, the United States Census Bureau (a principal agency of the U.S. Federal Statistical System, responsible for producing data about the American people) defines four statistical regions: Northeast, West, South, and Midwest. This division is widely used for data collection and analysis and fits our case particularly well as it reduces the levels of the variable from 51 to 4, a significant improvement.
+
+
+Reference -> https://en.wikipedia.org/wiki/List_of_regions_of_the_United_States
+
 
 ```{r echo=FALSE}
 # Create a list to store regions and their states
@@ -565,8 +574,8 @@ find_region <- function(state) {
 
 # Apply the function to each state in the data frame to add the region column
 Data$Region = sapply(Data$State, find_region)
-print("Distinct values for the Region variable:")
-# print(unique(Data$Region))
+cat("Distinct values for the Region variable:", unique(Data$Region))
+
 
 # Converting region in a factor and dropping (but storing) the State variable
 Data$Region = as.factor(Data$Region)
@@ -581,7 +590,7 @@ predictors = c(predictors, "Region")
 
 ```
 
-## Splitting and Scaling the data
+### SPLITTING AND SCALING DATASET
 
 In the first place, we decided to split the dataset into a training set (75% of the data) and a test set (25% of the data). We examined the distribution of the target variable Churn for the original, training, and test sets, displaying the counts and proportions of churned vs. non-churned customers.
 
@@ -683,7 +692,186 @@ test_data_scaled_oversample[, cols_to_scale] = scale(test_data_scaled_oversample
 
 ```
 
-## BEST MODEL SELECTION
+### LOW DIMENSIONAL MODEL ANALYSIS {.tabset .tabset-fade}
+
+Before proceeding to the full model aimed at providing the best result, we focus on some lower-dimensional models by considering only a few variables. This approach helps investigate interesting relationships within the data, offering clearer insights and interpretations
+
+#### Effects of Total day minutes and International Plan on Customer Churn
+
+As a first analysis, we fit a logistic regression model to evaluate the effects of Total day minutes and International Plan on Customer Churn, considering the unbalanced dataset.
+
+```{r}
+
+set.seed(1)
+model_international_minutes = glm(Churn ~ Total.day.minutes * International.plan, 
+                           family = binomial(link = "logit"), 
+                           data = test_data)
+# View model summary
+summary(model_international_minutes)
+
+```
+- The Intercept (-4.937732) is the log-odds of churn when Total.day.minutes is 0 and there is no international plan. It is highly significant with a very low p-value (< 2e-16), indicating a strong baseline effect. The result is consistent with the dataset highly unbalanced dataset on which the model was trained, since it indicates a general propensity of not to churn.
+- The positive coefficient for Total day minutes suggests that higher Total.day.minutes is associated with an increased likelihood of churn. This effect is statistically significant (p < 2e-16), confirming the result of the ANOVA test in our EDA.
+- The coefficient for the International plan is 4.231389. This indicates that having an international plan significantly increases the odds of churn also because of its high significance level (p = 5.20e-05). This is something that confirms the hypothesis tested during our EDA.
+- The interaction term is negative and significant (p = 0.0171), even if not as the other terms, indicating that the effect of Total.day.minutes on churn is different for those with an international plan. Specifically, for customers with an international plan, the increase in churn likelihood per minute of day usage is less than for those without an international plan.
+
+We proceed by plotting the computed probabilities.
+```{r echo=FALSE, fig.width=10}
+
+# Computing and storing predictive probabilities
+Data$predicted_probabilities = predict(model_international_minutes, newdata = Data, type="response")
+
+#Plotting computed probabilities
+ggplot(Data, aes(x = Total.day.minutes, y = predicted_probabilities, color = International.plan)) + 
+  geom_line(size = 1.2) + 
+  labs(title = "Probability of Churn by Total Day Minutes and International Plan", 
+       y = "Probability of Churn", x = "Total Day Minutes") +
+  scale_color_manual(values = c("red", "blue")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  
+    axis.title.x = element_text(size = 14, face = "bold"),  
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    axis.text.x = element_text(size = 12, color = "black"),  
+    axis.text.y = element_text(size = 12, color = "black"),  
+    panel.grid.major = element_line(color = "gray", linewidth = 0.5),  
+    panel.grid.minor = element_line(color = "lightgray", linewidth = 0.25),  
+    panel.background = element_rect(fill = "white") 
+  )
+
+# We drop the column of predicted probabilities since it is now useless
+Data$predicted_probabilities = NULL
+
+```
+
+The plot illustrates the probability of churn as a function of Total Day Minutes and the presence of an International Plan, based on an unbalanced training dataset. The red curve represents customers without an international plan, and the blue curve represents those with an international plan. The plot confirms our interpretation of the coefficients: even with an International Plan and with a high value of total day minutes, the predicted probability of churn is lower than 0.5. This suggests that such an unbalanced dataset may negatively affect the predictive performance of the model.
+
+Specifically, for customers without an international plan (red line), the probability of churn increases sharply as total day minutes increase, reflecting a higher sensitivity to usage. In contrast, for customers with an international plan (blue line), the probability of churn remains relatively stable and lower, even as total day minutes increase. This aligns with the negative interaction term in the model, indicating that the increase in churn likelihood per minute of day usage is less for customers with an international plan compared to those without.
+
+As a consequence, to address the imbalance and improve model accuracy, it is essential to consider training the model on a balanced dataset, ensuring that the model captures the true effect of predictors on churn, providing more reliable predictions.
+
+```{r }
+
+set.seed(1)
+model_international_minutes_oversample = glm(Churn ~ Total.day.minutes * International.plan, 
+                                              family = binomial(link = "logit"), 
+                                              data = train_data_oversample)
+```
+
+```{r include=FALSE}
+
+# View model summary
+summary(model_international_minutes_oversample)
+
+```
+
+```{r echo=FALSE, fig.width=10}
+
+# Computing and storing predictive probabilities
+Data$predicted_probabilities = predict(model_international_minutes_oversample, 
+                                        newdata = Data, 
+                                        type="response")
+
+#Plotting computed probabilities
+ggplot(Data, aes(x = Total.day.minutes, y = predicted_probabilities, color = International.plan)) + 
+  geom_line(size = 1.2) + 
+  labs(title = "Probability of Churn by Total Day Minutes and International Plan (Balanced)", 
+       y = "Probability of Churn", x = "Total Day Minutes") +
+  scale_color_manual(values = c("red", "blue")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  
+    axis.title.x = element_text(size = 14, face = "bold"),  
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    axis.text.x = element_text(size = 12, color = "black"),  
+    axis.text.y = element_text(size = 12, color = "black"),  
+    panel.grid.major = element_line(color = "gray", size = 0.5),  
+    panel.grid.minor = element_line(color = "lightgray", size = 0.25),  
+    panel.background = element_rect(fill = "white") 
+  )
+
+# We drop the column of predicted probabilities since it is now useless
+train_data_oversample$predicted_probabilities = NULL
+
+```
+
+As we can see, the balanced dataset corrects the underestimation of churn probabilities observed in the unbalanced dataset, providing a clearer picture of the churn dynamics.
+For customers without an international plan, the probability of churn now exceeds 0.5 much sooner, even at moderate levels of Total Day Minutes, reflecting a more accurate assessment of churn risk.
+For customers with an international plan, the probability of churn is consistently higher compared to the unbalanced dataset, but still lower than the no-plan group, aligning with the interaction effect observed in the model.
+
+
+#### Effects of Customer Service Calls on Churn
+
+his analysis aims to evaluate the impact of 'Customer Service Calls' on customer churn using logistic regression models. Given that probabilities are underestimated with an imbalanced dataset, we will only consider the oversampled dataset for this evaluation. The analysis of the imbalanced dataset is still available in the reference R script and revealed the same results as before.
+
+Hence, we build the model using only customer service calls and we plot the computed probabilities.
+
+```{r}
+
+set.seed(1)
+model_customer_service_calls_oversample = glm(Churn ~ Customer.service.calls, 
+                                             family = binomial(link = "logit"), 
+                                             data = train_data_oversample)
+
+```
+
+```{r echo=FALSE}
+
+# Computing and storing predictive probabilities
+Data$predicted_probabilities = predict(model_customer_service_calls_oversample, 
+                                        newdata = Data, 
+                                        type="response")
+
+#Plotting computed probabilities
+ggplot(Data, aes(x = Customer.service.calls, y = predicted_probabilities)) + 
+  geom_line(size = 1.2, color = "blue") + 
+  labs(title = "Probability of Churn by Customer Service Calls (Balanced)",
+       y = "Probability of Churn", x = "Customer Service Calls") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  
+    axis.title.x = element_text(size = 14, face = "bold"),  
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    axis.text.x = element_text(size = 12, color = "black"),  
+    axis.text.y = element_text(size = 12, color = "black"),  
+    panel.grid.major = element_line(color = "gray", size = 0.5),  
+    panel.grid.minor = element_line(color = "lightgray", size = 0.25),  
+    panel.background = element_rect(fill = "white") 
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1))
+
+# We drop the column of predicted probabilities since it is now useless
+train_data_oversample$predicted_probabilities = NULL
+
+```
+
+
+Again, the model confirms our findings during the EDA process. The plot demonstrates a strong positive relationship between the number of customer service calls and the probability of churn, highlighting the importance of effective customer service. The relationship is however quite trivial: frequent interactions with customer service often indicate that the customer is experiencing recurring issues or dissatisfaction with the service. The more frequently a customer contacts customer service, the more likely they are to be facing unresolved problems, leading to frustration and a higher likelihood of churn.
+
+#### Classification tree
+
+To provide a more concrete interpretation of our findings, we decided to implement a small but highly interpretable classification tree. This model is ideal for performing a clear analysis as it allows us to easily visualize and understand the decision paths and key factors influencing customer churn. The simplicity and transparency of a classification tree make it an excellent choice for communicating insights and actionable recommendations based on our data.
+
+```{r}
+
+set.seed(1)
+simple_tree_oversample = rpart(Churn ~ Total.day.minutes + International.plan + Customer.service.calls, 
+                               data = train_data_oversample, 
+                               method = "class")
+
+```
+
+```{r echo=FALSE}
+
+# Plotting tree
+rpart.plot(simple_tree_oversample, main = "Classification Tree")
+
+```
+
+The classification tree shows that customers with high total day minutes (>= 223) (32% in the balanced dataset) have a 75% probability of churn. For customers with fewer total day minutes (< 223), churn probability is influenced by customer service calls and the presence of an international plan. Those with less than 4 customer service calls and no international plan (44% of the observations) have a low churn probability (15%), whereas having an international plan in this group (10%) increases the churn probability to 75%. Additionally, customers with 4 or more customer service calls have the highest churn probability (87%), confirming again the relevance of this factor on customer retention.
+
+
+### BEST MODEL SELECTION {.tabset .tabset-fade}
 
 ```{r include=FALSE}
 
@@ -707,10 +895,6 @@ get.metrics<- function(conf.mat) {
   
   return(metrics)
 }
-
-# Create a list to store every confusion matrix
-
-confusion_matrices = list()
 
 ```
 
@@ -758,10 +942,14 @@ plot_confusion_matrix <- function(conf_matrix, title) {
 
 ```
 
+In this section, we explore various models and techniques in order to train the best possible model with the goal to predict consumer churn. Since in general the oversampled dataset provided better performances, we are going to consider only the latter, except for cases in which certain results are particularly relevant.
 
-In this section, we explore various models and techniques in order to train the best possible model in order to predict consumer churn. Since in general the oversampled dataset provided better performances, we are going to consider only the latter, except for cases in which certain results are particularly relevant.
+#### Linear Models {.tabset .tabset-fade} 
 
-### Logistic Regression
+In this section, we focus on building linear models to predict customer churn. In spite of the fact that the performance is highly affected by the linearity assumption, those remain fundamental since they serves as a benchmark for more complex models and helps validate the data and approach.
+Subsequently, we perform variable selection, a crucial step in building efficient and interpretable models. It involves identifying the most relevant predictors from a set of potential variables. Two commonly used criteria for model selection are the Akaike Information Criterion (AIC) and the Bayesian Information Criterion (BIC).
+
+##### Logistic Regression
 
 In the first place, we consider as baseline the models in which no variable is used and all variables are included. Firstly, we build the model with all the variables.
 
@@ -772,7 +960,6 @@ model_baseline_logistic_oversample = glm(Churn ~ .,
                               family = "binomial")
 
 ```
-
 
 ```{r include=FALSE}
 
@@ -802,17 +989,13 @@ And subsequently we test the hypothesis of equivalence between the two models
 anova(model_0, model_baseline_logistic_oversample, test = "Chisq")
 
 ```
-The null model fits the data poorly with a deviance of 5905.6. The full model, which includes all the specified predictors, fits the data significantly better, with a deviance of 4437.3. The reduction in deviance (1468.3) is highly significant, with a p-value < 2.2e-16. Including the predictors in Model 2 significantly improves the fit of the model, 
-indicating that the predictors collectively provide valuable information in predicting customer churn.
 
-### Variable selection with BIC and AIC
+The null model fits the data poorly with a deviance of 5905.6. The full model, which includes all the specified predictors, fits the data significantly better, with a deviance of 4437.3. The reduction in deviance (1468.3) is highly significant, with a p-value \< 2.2e-16. Including the predictors in Model 2 significantly improves the fit of the model, indicating that the predictors collectively provide valuable information in predicting customer churn.
 
-Variable selection is a crucial step in building efficient and interpretable models. It involves identifying the most relevant predictors from a set of potential variables. Two commonly used criteria for model selection are the Akaike Information Criterion (AIC) and the Bayesian Information Criterion (BIC).
 
-#### AIC
+##### AIC
 
-AIC is used to compare models, with a focus on finding the model that best balances fit and complexity. It penalizes the number of parameters, discouraging overfitting, while prioritizing models with a better fit to the data.
-We performed feature selection using three different methods: forward selection, backward selection, and both directions selection.
+The AIC metric is used to compare models built with different set of predictors, with a focus on finding the model that best balances fit and complexity. It penalizes the number of parameters, discouraging overfitting, while prioritizing models with a better fit to the data. We performed feature selection using three different methods: forward selection, backward selection, and both directions selection.
 
 ```{r include=FALSE}
 set.seed(1)
@@ -856,6 +1039,7 @@ cat("\n")
 
 
 ```
+
 Given the goal of creating a simpler model to avoid overfitting and enhance interpretability, we will choose the model generated by forward selection. This model includes only 9 features, providing a balance between simplicity and predictive power.
 
 ```{r include=FALSE}
@@ -881,7 +1065,7 @@ confusion_matrix_aic_oversample = table(predictions_aic_oversample, test_data_sc
 
 ```
 
-#### BIC
+##### BIC
 
 BIC is similar to AIC but applies a stronger penalty for the number of parameters. It is particularly useful for selecting simpler models, as it penalizes model complexity more heavily than AIC.
 
@@ -927,11 +1111,12 @@ print(paste(selected_variables_bic_both_oversample, collapse = ", "))
 cat("\n")
 
 ```
+
 Again, the simplest model (the one with the lowest number of covariates) should be selected. In this case, with forward selection BIC selected 7 features confirming that it applies a stronger penalty for model complexity, often leading to simpler models.
 
 In general, the process of feature selection confirmed that the variables International Plan, Total day minutes and Customer Service calls are relevant in order to predict customer Churn. Also, considering the stricter model we discover that the Region (State) categorical variable is not taken into account, while Voice mail plan, Total eve minutes, Total night minutes and Total intl minutes are kept in the model. The same features are selected by AIC that also considers Total intl calls and Total day calls.
 
-```{r}
+```{r include=FALSE}
 
 # Select the simplest model, hence the one with the lowest features selected
 feature_counts_bic_oversample = c(forward = num_features_bic_forward_oversample, 
@@ -955,9 +1140,9 @@ confusion_matrix_bic_oversample = table(predictions_bic_oversample, test_data_sc
 
 ```
 
-### Comparisson Linear models
+##### Comparisson between Linear models
 
-In the first place, we report the confusion matrix for each of the three models that were previously trained in order to have a general understanding of their performance. It is important to recall that each prediction has been made on the test set (on which the models were not trained) that was previously scaled with the ::: of the test set.
+First, we report the confusion matrix for each of the three previously trained models to provide a general understanding of their performance. It is important to note that each prediction was made on the test set, which had been scaled using the parameters derived from the training set.
 
 ```{r echo=FALSE}
 
@@ -970,9 +1155,12 @@ bic_plot = plot_confusion_matrix(confusion_matrix_bic_oversample, "BIC Model")
 grid.arrange(baseline_plot, aic_plot, bic_plot, ncol = 3, top = textGrob("Confusion Matrices", gp = gpar(fontsize = 20, fontface = "bold")))
 
 ```
-Also, we consider their performance in terms of AUC (Area Under ROC Curve).
 
-```{r echo=FALSE, warning=FALSE}
+The Baseline Model has a surprisingly high number of true positives relative to the total actual positives, indicating it is particularly effective at minimizing false negatives. However, this effectiveness comes at the cost of a high number of false positives, as the model tends to classify many observations as positive. While this aligns with our aim of minimizing false negatives, the overall accuracy of the model is too low, indicating significant room for improvement. In contrast, the BIC and AIC models reduce misclassification errors but perform poorly in identifying true positives. This may be due to the models' excessive simplicity, which fails to capture certain patterns in the test data. The similarity in the features selected by the BIC and AIC models is evidenced by their almost identical correlation matrices.
+
+Also, we consider their performance in terms of AUC (Area Under ROC Curve). The ROC (Receiver Operating Characteristic) curve is a graphical representation of a classifier's performance, plotting the true positive rate against the false positive rate at various threshold settings.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
 # Compute ROC curves
 
 library(pROC)
@@ -993,18 +1181,25 @@ roc_bic = roc(test_data$Churn,
               predict(model_bic_final_oversample, 
                       newdata = test_data_scaled_oversample, 
                       type = "response"), 
-              plot = TRUE, main = "BIC Model", col = "green", lwd = 3, 
+              plot = TRUE, main = "BIC Model", col = "purple", lwd = 3, 
               auc.polygon = TRUE, print.auc = TRUE)
 ```
 
-### Penalized approaches
 
-#### Lasso Regression
+The Baseline Model shows decent performance with an AUC of 0.827, but it is outperformed by both the AIC and BIC models. Also, we can see that the specificity is particulary high even for high levels of sensitivity, confirming that the model is great at identifying true positives.
+AIC and BIC models, as saw before, present a more balanced result. The AIC Model demonstrates the best performance with the highest AUC of 0.854, indicating a slightly higher discrimination capability between churn and non-churn customers. The BIC Model also performs well, with an AUC of 0.846, closely following the AIC Model and significantly better than the Baseline Model.
 
-Lasso regression is a linear regression technique that includes a penalty term to reduce model complexity and prevent overfitting. It performs feature selection by shrinking some coefficients to zero, effectively selecting only the most important predictors. This helps in building simpler and more interpretable models.
 
+#### Penalized approaches {.tabset .tabset-fade} 
+
+Penalized approaches like Lasso (Least Absolute Shrinkage and Selection Operator) and Ridge regression add regularization terms to the loss function to prevent overfitting. We decided to test these methods since AIC and BIC models showed minimal improvement with respect to the baseline model and hence a regularization approach could have enhanced model performance by managing complexity and selecting relevant features more effectively.
+
+##### Lasso Regression
+
+Lasso regression adds a penalty equal to the absolute value of the coefficients, encouraging sparsity by shrinking some coefficients to zero, effectively selecting only the most important predictors. This helps in building simpler and more interpretable models.
+
+We start by training the model.
 ```{r echo=FALSE, warning=FALSE}
-
 set.seed(1)
 # Train the Lasso regression model on the oversampled data
 X_train_oversample = train_data_scaled_oversample
@@ -1012,17 +1207,24 @@ Y_train_oversample = as.numeric(X_train_oversample$Churn)
 X_train_oversample$Churn = NULL
 fit_oversample = glmnet(as.matrix(X_train_oversample), Y_train_oversample, alpha = 1, lambda = seq(0, 0.15, length = 30))
 
+```
+
+Afterwards, we consider the relation between the coefficients and the parameter lambda.
+```{r echo=FALSE, warning=FALSE}
+set.seed(1)
 # Plot coefficient values against the (log-)lambda sequence
 predictor_names_oversample = colnames(as.matrix(X_train_oversample))
-colors_oversample = sample(1:length(predictor_names_oversample))
-plot(fit_oversample, xvar = "lambda", label = TRUE, col = colors_oversample)
-legend("topright", legend = predictor_names_oversample, col = colors_oversample, lty = 1, cex = 0.5, text.width = 1.2)
+colors = c("black", "blue", "red", "yellow", "green", "orange", "purple", "deepskyblue",
+           "grey", "#3D0C02", "violet", "#9EFD38", "#3B7A57", 	"#841B2D")
+plot(fit_oversample, xvar = "lambda", label = TRUE, col = colors)
+legend("topright", legend = predictor_names_oversample, col = colors, lty = 1, cex = 0.5, text.width = 1.2)
 
 ```
 
-This plot shows how the coefficients of different features in a Lasso regression model change as the regularization parameter increases (left on the x-axis). As it increases, the coefficients shrink toward zero, demonstrating Lasso's feature selection capability. Features with coefficients that remain large even at higher values are considered to be more important, while those that quickly shrink to zero are less important. 
+This plot shows how the coefficients of different features in a Lasso regression model change as the regularization parameter increases (left on the x-axis). As it increases, the coefficients shrink toward zero, demonstrating Lasso's feature selection capability. Features with coefficients that remain large even at higher values are considered to be more important, while those that quickly shrink to zero are less important. An interesting result is that the predictor that is shrinked only at higher values is "total international minutes".
 
-However, in order to train the model a crucial step is the hyperparameter tuning.
+
+After the preliminary analysis, we perform the crucial step of hyperparameter tuning to identify, with cross validation, an estimate for the best value for lamda.
 
 ```{r}
 set.seed(1)
@@ -1034,6 +1236,10 @@ model_lasso_oversample = train(Churn ~ .,
                                trControl = trainControl(method = "cv", number = 10), 
                                tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
 
+
+```
+
+```{r echo=FALSE}
 # Plot accuracy values against the lambda sequence
 plot(model_lasso_oversample,
      label = TRUE, 
@@ -1047,7 +1253,7 @@ cat("The highest value of accuracy:", best_accuracy_lasso_oversample, "is obtain
 
 ```
 
-The best accuracy is obtained without a regularization parameter: in follows that the model built is a simple linear regression model. As the parameter continues to increase beyond 0.05, the accuracy starts to decline more steeply, indicating that the model is becoming overly regularized. This excessive penalization of the coefficients leads to underfitting, where the model is too simple to capture the underlying patterns in the data.
+The best accuracy is obtained without a regularization parameter: in follows that the model built is a simple linear regression model. As the parameter continues to increase beyond 0.05, the accuracy starts to decline more steeply, indicating that the model is becoming overly regularized. This excessive penalization of the coefficients leads to underfitting, where the model is too simple to capture the underlying patterns in the data. The conclusion is similar with the one obtained with AIC and BIC: in order to have a satisfying prediction performance then each feature must be included in the model.
 
 ```{r include=FALSE}
 
@@ -1058,10 +1264,11 @@ confusion_matrix_lasso_oversample = table(predictions_lasso_oversample, test_dat
 
 ```
 
+##### Ridge Regression
 
-#### Ridge Regression
+Ridge regression is another linear regression technique that includes a penalty term to reduce model complexity and prevent overfitting. Unlike Lasso regression, which can shrink some coefficients to zero and perform feature selection, with Ridge the coefficients tend to zero but they are never exactly to zero.
 
-Ridge regression is another linear regression technique that includes a penalty term to reduce model complexity and prevent overfitting. Unlike Lasso regression, which can shrink some coefficients to zero and perform feature selection, with Ridge the coefficients tend to zero but they are never exactly to zero. 
+As we have done before, we firstly train the model to have an overview of the relation between the parameter lambda and the coefficients.
 
 ```{r}
 
@@ -1074,15 +1281,14 @@ ridge_fit_oversample = glmnet(x = X_train_oversample,
 ```{r echo=FALSE}
 plot(ridge_fit_oversample,
      label = F, 
-     xvar = "lambda")
-legend("topright", legend = colnames(X_train_oversample), 
-       col = 1:ncol(X_train_oversample), lty = 1, cex = 0.5)
+     xvar = "lambda", col = colors)
+legend("topright", legend = predictor_names_oversample, col = colors, lty = 1, cex = 0.5, text.width = 1.2)
 
 ```
-The plot confirms the earlier statement: as the parameter Lambda increases, the coefficients shrink towards zero but never actually reach it, in contrast with what we have previously shown with Lasso.
-Another relevant observation is that the plot highlights the most important features, namely International Plan, Total daily minutes, Customer service calls, and Total night minutes. These features are shrunk at the lowest rate, indicating their significance in the model
 
-We then proceed, as we have done for 
+The plot confirms the earlier statement: as the parameter Lambda increases, the coefficients shrink towards zero but never actually reach it, in contrast with what we have previously shown with Lasso. 
+
+We then proceed, as we have done for Lasso regression, to tune the parameters selecting the value with which the model reaches the highest accuracy on the validation set.
 
 ```{r}
 
@@ -1117,6 +1323,7 @@ cat("The highest accuracy is:", max(model_ridge_oversample$results$Accuracy),
 
 
 ```
+
 ```{r include=FALSE}
 
 probabilities_ridge_oversample = predict(model_ridge_oversample, test_data_scaled_oversample, 
@@ -1126,7 +1333,7 @@ confusion_matrix_ridge_oversample = table(predictions_ridge_oversample, test_dat
 
 ```
 
-### Comparisson between penalized approaches
+##### Comparisson between penalized approaches
 
 ```{r echo=FALSE}
 
@@ -1143,7 +1350,9 @@ grid.arrange(lasso_plot, ridge_plot, ncol = 2, top = textGrob("Confusion Matrice
 
 ```
 
-```{r echo=FALSE, warning=FALSE}
+The similarity between the confusion matrices for the penalized approaches (Lasso and Ridge) and the baseline model indicates that the lambda parameter has little impact on the results. In the case of Lasso, the lambda value is almost negligible, and for Ridge, it is particularly small. This confirms that removing and shrinking features does not benefit our analysis. Consequently, these three methods essentially represent the same model, leading us to decide not to report the AUC curves for the penalized approaches. Including them in our final conclusions would be redundant, as the findings would merely reiterate what has already been discussed regarding the baseline model's performance.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, include = FALSE}
 
 ## ROC
 
@@ -1163,16 +1372,16 @@ par(mfrow=c(1,1))
 
 ```
 
+#### Non linear methods {.tabset .tabset-fade}
 
+While linear and penalized regression methods provide a solid foundation for understanding the relationships between predictors and the response variable, they often fall short when dealing with more complex, non-linear interactions within the data. To address this, we turn to non-linear methods which can capture intricate patterns and improve predictive performance. Non-linear models, such as the decision tree seen before, random forests, and boosting techniques, offer flexibility in modeling relationships that linear methods cannot adequately describe.
 
-
-### Non linear methods
-
-#### Random Forests
+##### Random Forests
 
 With Random Forests, a number of decision trees is built on bootstrapped training samples. However, each time a split in a tree is considered, a random sample of m predictors is chosen as split candidates from the full set of predictors.
 
-We first start by building a simple model with default parameters. The number of predictors considered at each split (mtry in the code) is typically the square root of the number of the predictors. In our case is then 4. We also consider a forest with 500 trees. 
+We first start by building a simple model with default parameters. The number of predictors considered at each split (mtry in the code) is typically the square root of the number of the predictors. In our case is then 4. We also consider a forest with 500 trees.
+
 ```{r}
 
 set.seed(1)
@@ -1182,9 +1391,9 @@ random_forest_model_oversample = randomForest(Churn ~ ., data = train_data_overs
                                               importance = T)
 ```
 
-In this first analysis, we are not really interested on the model performance but we just want to know how the OOB error changes increasing the number of the trees.
+In this initial analysis, our primary focus is not on model performance but on observing how the Out-Of-Bag (OOB) error changes as we increase the number of trees.
 
-```{r}
+```{r echo=FALSE}
 
 # Storing the error rate matrix
 error_rate_matrix_oversample = random_forest_model_oversample$err.rate
@@ -1203,9 +1412,10 @@ ggplot(data = error_rate_matrix_oversample, aes(x = Trees, y = Error)) +
   geom_line(aes(color = Type))
 
 ```
-We can see that the out-of-bag (OOB) error stabilizes after around 100 trees, indicating that the random forest model achieves consistent performance. The error for the "True" class is significantly lower than the "False" class, suggesting the model is better at predicting "True" than "False".
 
-We can also show the features importance considering the metric of mean decrease accuracy.
+We can see that the out-of-bag (OOB) error stabilizes after around 100 trees, indicating that the random forest model achieves consistent performance. The error for the "True" class is significantly lower than the "False" class, suggesting the model is better at predicting "True" than "False". This could be caused by the fact that we are training the model on an oversampled balanced data. However, we also tested the model on unbalanced data and its performance was significantly worse.
+
+We can also show the features importance considering the metric of mean decrease accuracy (computed by measuring the increase in the model's OOB error when a feature's values are randomly permuted; higher decreases in accuracy indicate greater importance).
 
 ```{r echo=FALSE}
 
@@ -1232,12 +1442,13 @@ barplot(
 par(mar = c(5, 4, 4, 2) + 0.1) 
 
 ```
+
 We can see that "Total day minutes", "Customer service calls", "Total eve minutes" and "International Plan" are among the most important features, as they have the highest values in both metrics, indicating their strong influence on model accuracy and confirming our findings so far.
 
 
-One of the most straighforward drawback of random forests is their tendency to overfit the data. This is caused by the fact that the algorithm is based on the construction of decision trees which are particularly prone to overfitting. Even if random forests address the issue increasing the variability of the model, a process of hyperparameter tuning is fundamental for an optimal performance. 
+One of the most straightforward drawbacks of random forests is their tendency to overfit the data due to the inherent nature of decision trees, which are particularly prone to overfitting. Although random forests mitigate this issue by increasing model variability, hyperparameter tuning is essential for optimal performance.
 
-In our R reference code, we adapted two different strategies in order to tune the parameters. In the first one, we used a classic approach with the function "train", specifying a tune grid to test with cross validation (5 folds). However, this function allows to automatically tune only the parameter mtry, and hence it does not consider other relevant parameters such as the number of trees, the maximum number of nodes and the node size. Hence, we decided to build a grid, randomly sample combinations and test them considering the OOB error, an accurate way to estimate the test error. Since the latter yelds better results, we decided to report it.
+In our R reference code, we employed two different strategies to tune the parameters. First, we used a classic approach with the "train" function, specifying a tune grid to test with 5-fold cross-validation. However, this function automatically tunes only the parameter mtry and does not consider other relevant parameters such as the number of trees, maximum number of nodes, and node size. Therefore, we built a grid, randomly sampled combinations, and tested them using the OOB error, which is an accurate estimate of the test error. Since this approach yielded better results, we decided to report it.
 
 ```{r include=FALSE}
 
@@ -1283,7 +1494,6 @@ for (i in 1:nrow(sampled_grid)) {
 # Find the best parameters
 best_parameters_random_forest = results_random_forest_tuning %>%
   filter(mean_err_rate == min(mean_err_rate))
-library(knitr)
 
 kable(best_parameters_random_forest, caption = "Best Parameters for Random Forest")
 
@@ -1315,23 +1525,24 @@ confusion_matrix_rf = table(predictions_rf, test_data$Churn)
 
 ```
 
-### XGBOOST
+##### XGBOOST
 
 XGBoosting is an advanced implementation of gradient boosting that builds an ensemble of decision trees sequentially, with each tree correcting the errors of the previous ones, optimized for speed and performance.
 
-Since XGBoost requires numerical input and cannot directly handle categorical variables, a first essential step is to create dummy variables.
+Since XGBoost requires numerical input and cannot directly handle categorical variables, as a first essential step we created dummy variables to encode categorical variables.
 
-```{r warning=FALSE}
+```{r warning=FALSE, include=FALSE}
 
 # Create dummy variables for the data
-X_train_oversample_dummy = dummyVars(Churn ~ ., data = train_data_oversample) %>% predict(train_data_oversample)
+X_train_oversample_dummy = dummyVars(Churn ~ .
+                                     , data = train_data_oversample) %>% predict(train_data_oversample)
 Y_train_oversample_dummy = train_data_oversample$Churn %>% as.numeric(.) - 1
 X_test_oversample_dummy = dummyVars(Churn ~ ., data = test_data) %>% predict(test_data)
 Y_test_oversample_dummy = test_data$Churn %>% as.numeric(.) - 1
 
 ```
 
-In order to have a general understanding of the performance of the model, we firstly train it without tuning.
+Then, in order to have a general understanding of the performance of the model, we trained it without tuning the hyperparameters.
 
 ```{r message=FALSE, results='hide'}
 
@@ -1364,6 +1575,7 @@ points(1:50, train_errors, type = "b", cex = 0.5)
 legend("topright", legend = c("Train", "Test"), col = c(1, 3), lty = 1, lwd = 2, cex = 0.7)
 
 ```
+
 ```{r include=FALSE}
 
 # We then consider its performance
@@ -1375,8 +1587,7 @@ confusion_matrix_xg = table(predictions_xg, test_data$Churn)
 
 The plot shows that as the number of trees increases, the training error consistently decreases, approaching zero, indicating that the model fits the training data very well. However, the test error stabilizes at a low value early on and remains relatively constant, suggesting that additional trees do not significantly improve the model's performance on the test data. This indicates that the model generalizes well without overfitting, as there is a minimal gap between the training and test errors after a certain number of trees.
 
-We then proceed with the process of hyperparameter tuning using cross validation. 
-Since tasks like cross-validation can be paralized, in order to speed up computations, we created a cluster of 5 worker nodes with the library doParallel.
+We then proceed with the process of hyperparameter tuning using cross validation. Since tasks like cross-validation can be paralized, in order to speed up computations, we created a cluster of 5 worker nodes with the library doParallel.
 
 ```{r}
 
@@ -1385,20 +1596,19 @@ registerDoParallel(cl)
 
 ```
 
-
 ```{r include=FALSE}
 
-tune_grid <- expand.grid(
+tune_grid = expand.grid(
   nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
   eta = 0.3,
-  max_depth = 5,
+  max_depth = c(1,2,3,4,5,6,7,8),
   subsample = 1,
   colsample_bytree = 1,
   min_child_weight = 5,
-  gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+  gamma = 0 #c(0.1, 0.2, 0.5, 0.75, 1)
 )
 
-fitControl <- trainControl(
+fitControl = trainControl(
   method = "repeatedcv",
   number = 10,
   repeats = 10,
@@ -1410,7 +1620,7 @@ fitControl <- trainControl(
 ```{r warning=FALSE}
 
 set.seed(1)
-model_xg_cv <- train(
+model_xg_cv = train(
   Churn ~ ., data = train_data_oversample, 
   method = "xgbTree", 
   trControl = fitControl,
@@ -1431,9 +1641,13 @@ stopCluster(cl)
 trellis.par.set(caretTheme())
 plot(model_xg_cv)
 
+# Print best parameters
+best_params_df = as.data.frame(model_xg_cv$bestTune)
+kable(best_params_df, caption = "Best Parameters for XGBOOST")
+
 ```
 
-The plot shows the accuracy of an XGBoost model (evaluated via repeated cross-validation) across different boosting iterations (# Boosting Iterations) and minimum loss reduction (gamma) values. The number of boosting iterations significantly impacts the model's accuracy up to a certain point, after which the benefit plateaus. The gamma parameter (minimum loss reduction) has little to no effect on the model's performance within the tested range, indicating that the model is relatively insensitive to this hyperparameter for the given dataset.
+The plot shows that increasing the maximum tree depth significantly improves model accuracy, with depths of 7 and 8 performing the best, achieving over 95% accuracy. The accuracy improves with the number of boosting iterations, plateauing around 60-80 iterations for depths 5 and above, indicating diminishing returns beyond this point. Lower depths (1-3) exhibit significantly lower accuracy, staying below 85%. To optimize performance, it is crucial to tune both the number of boosting iterations and the maximum tree depth, favoring higher depths (but we need to take into account the risk of overfitting).
 
 ```{r include=FALSE}
 
@@ -1444,8 +1658,7 @@ confusion_matrix_xg_cv = table(predictions_xg_cv, test_data$Churn)
 
 ```
 
-
-#### Comparisson between Tree based models
+##### Comparisson between Tree based models
 
 As we have done before, to firstly asses the performances we plot the confusion matrices for Random Forests and XGBOOST (with and without tuning).
 
@@ -1463,7 +1676,11 @@ grid.arrange(rf_plot, xg_plot, xg_cv_plot, ncol = 3, top = textGrob("Confusion M
 
 ```
 
+The initial belief that non-linear models would perform better is confirmed. The tree-based methods present similar confusion matrices, balancing sensitivity and specificity: indeed, the number of true positives is significantly higher than in the previous cases without any tradeoff in overall accuracy. Furthermore, the models excel at classifying the negative class, with very few misclassifications.
 
+A peculiar result is that the untuned model seems to perform better than the tuned model. However, since the difference between the two is only three observations, this is likely due to the way the test and train sets were split. It would be inaccurate to conclude definitively that the untuned model is better, but also that this result is purely by chance. Indeed, it is possible that better hyperparameter tuning (requiring higher computational power) is needed or that the cross-validation error did not provide an accurate estimate of the test error.
+
+The substantial increase in performance is confirmed also by the AUC metrics:
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -1489,199 +1706,99 @@ par(mfrow=c(1,1))
 
 ```
 
-## CONCLUSIONS
+### CONCLUSIONS
 
-Given the high imbalance in our dataset, we’ve prioritized sensitivity in our selection criteria because minimizing false negatives—thereby reducing missed positives—is crucial for our analysis. In the telecom industry, missing a false negative (failing to predict a customer’s churn) is more costly than identifying a false positive (predicting a customer will churn when they won’t). This approach helps ensure we capture as many potential churners as possible, enabling proactive retention efforts and ultimately reducing customer attrition. Balancing sensitivity with accuracy remains important, but sensitivity is our primary focus to mitigate the higher cost of missed churn predictions.
+Given the high imbalance in our dataset, we have prioritized sensitivity in our selection criteria because minimizing false negatives and thereby reducing missed positives is crucial for our analysis. In the telecom industry, failing to predict a customer’s churn (false negative) is more costly than predicting that a customer will churn when they won’t (false positive). This approach helps ensure we capture as many potential churners as possible, enabling proactive retention efforts and ultimately reducing customer attrition. However, balancing sensitivity with accuracy remains important: if there are too many false positives because the models tend to classify most observations as positive, proactive retention efforts may become too costly and often unnecessary. Therefore, while sensitivity (recall) is our primary focus to mitigate the higher cost of missed churn predictions, the overall accuracy must also be satisfactory to ensure a feasible and effective retention strategy.
 
 ```{r echo=FALSE}
 # Calculate metrics for each model
 metrics_baseline = get.metrics(confusion_matrix_baseline_logistic_oversample)
 metrics_aic = get.metrics(confusion_matrix_aic_oversample)
 metrics_bic = get.metrics(confusion_matrix_bic_oversample)
-
-# Combine metrics into a single data frame
-metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic)
-rownames(metrics_combined) = c("Baseline", "AIC", "BIC")
-
-# Round the metrics to 2 decimal places
-metrics_combined = round(metrics_combined, 4)
-
-# Create the table plot
-grid.newpage()
-grid.draw(plot_table(metrics_combined))
-
-```
-
-
-```{r echo=FALSE}
-
-## Metrics
-
 metrics_rf = get.metrics(confusion_matrix_rf)
 metrics_xg = get.metrics(confusion_matrix_xg)
 metrics_xg_cv = get.metrics(confusion_matrix_xg_cv)
 
 # Combine metrics into a single data frame
-metrics_combined = rbind(metrics_rf, metrics_xg, metrics_xg_cv)
-rownames(metrics_combined) = c("Random Forest", "XGBOOST", "XGBOOST (Tuned)")
+metrics_combined = rbind(metrics_baseline, metrics_aic, metrics_bic,
+                         metrics_rf, metrics_xg, metrics_xg_cv)
+rownames(metrics_combined) = c("Baseline", "AIC", "BIC",
+                               "Random Forests", "XGBOOST", "XGBOOST Tuned")
 
 # Round the metrics to 2 decimal places
 metrics_combined = round(metrics_combined, 4)
 
-# Create the table plot
-grid.newpage()
-grid.draw(plot_table(metrics_combined))
+kable(metrics_combined)
 
 ```
+Considering our initial goal of minimizing false negatives, the best model appears to be the XGBOOST with default parameters. However, given the minimal difference in performance, if we were to predict customer churn on unobserved data, we believe the tuned XGBOOST model has the highest probability of delivering the best performance. This is because the results on the test set can be heavily influenced by the specific nature of the observations, and changing the random seed could lead to different outcomes. Nonetheless, hyperparameter tuning remains a crucial technique that must be applied to tailor the model to the specific problem we are addressing.
 
-```{r echo=FALSE}
-
-## Metrics
-
-metrics_lasso = get.metrics(confusion_matrix_lasso_oversample)
-metrics_ridge = get.metrics(confusion_matrix_ridge_oversample)
+Overall, we are satisfied with the performance of the non-linear methods, as evidenced by their balanced sensitivity and specificity. The high overall accuracy is further supported by elevated F1 scores, which require both high recall (sensitivity) and precision. These metrics demonstrate that our models are not only accurate but also effective at identifying true positives and minimizing false positives, making them robust choices for predicting customer churn.
 
 
-# Combine metrics into a single data frame
-metrics_combined = rbind(metrics_lasso, metrics_ridge)
-rownames(metrics_combined) = c("Lasso", "Ridge")
+## TASK 2 {.tabset .tabset-fade}
 
-# Round the metrics to 2 decimal places
-metrics_combined = round(metrics_combined, 4)
+For this task, we provided a customer segmentation which is based on the CLV index (Customer Lifetime Value) and provides insights about groups of customers that the company can target with ad-hoc promotional campaigns. In this way the company would be more efficient in targeting only customers who have a large CLV.
 
-# Create the table plot
-grid.newpage()
-grid.draw(plot_table(metrics_combined))
+```{r include=FALSE}
+# Importing again the dataset since it was cleaned
 
-```
-## Task 2
-
-For this task, we provided a customer segmentation which is based on the CLV
-index (Customer Lifetime Value) and provides insights about groups of customers
-that the company can target with ad-hoc promotional campains in response to
-possible churns. In this way the company would be more efficient in targeting
-only customers who have a large CLV.
-
-## Loading Libraries(TO BE REMOVED)
-
-```{r}
-library(ggplot2)
-library(dplyr)
-library(skimr)
-library(readr)
-library(sf)
-library(usmap)
-library(grid)
-library(gridExtra)
-library(corrplot)
-library(caret)
-library(ROSE)
-library(factoextra)
-library(cluster)
-library(ggsci)
-```
-
-## Importing Dataset(TO BE REMOVED)
-
-```{r}
-Data <- read.csv2("path/to/TelecomChurn.csv", 
-                 header = TRUE, 
+Data = read.csv2("./Dataset/TelecomChurn.csv", 
+                 header = T, 
                  sep = ",", 
                  colClasses = "character")
-variables <- colnames(Data)
-categorical_variables <- c("State", "International.plan", "Voice.mail.plan", "Area.code")
-target_variable <- "Churn"
-numerical_variables <- setdiff(variables, c(categorical_variables, target_variable))
-```
+variables = colnames(Data)
+categorical_variables = c("State", "International.plan", "Voice.mail.plan", "Area.code")
+target_variable = "Churn"
+numerical_variables = setdiff(variables, c(categorical_variables, target_variable))
+predictors = setdiff(variables, target_variable)
 
-## Data Preprocessing(TO BE REMOVED)
-
-```{r}
 # Ensuring that variables are converted in the correct form
-Data[[target_variable]] <- as.factor(Data[[target_variable]])
+Data[[target_variable]] = as.factor(Data[[target_variable]])
 for (var in numerical_variables) {
-  Data[[var]] <- as.numeric(Data[[var]])
+  Data[[var]] = as.numeric(Data[[var]])
 }
 for (var in categorical_variables) {
-  Data[[var]] <- as.factor(Data[[var]])
+  Data[[var]] = as.factor(Data[[var]])
 }
 
-# Dropping the variable used in the for loop
-rm(var)
-```
 
-## Analysis
-
-We begin by computing some indeces that we will need for the analysis. We are
-basically creating other features.
-
-### Calculating ARPU (Average Revenue Per User)
-
-The ARPU (Average Revenue Per User) is an important index that we'll use later
-to compute the CLV. This index groups all the charges for the day, eve and night.
-
-```{r}
-Data <- Data %>%
-  mutate(TotalCharges = Total.day.charge + Total.eve.charge + Total.night.charge + Total.intl.charge)
-ARPU <- mean(Data$TotalCharges)
-ARPU
-```
-
-### Calculating Total Daily Minutes
-
-This is another "summary" of the time spent by the customer using the service.
-The creation of this index is for the sole purpose of enlarging the set of 
-features that we'll use for clustering.
-
-```{r}
-Data <- Data %>%
-  mutate(Total.minutes = Total.day.minutes + Total.eve.minutes + Total.night.minutes)
-```
-
-### Customer Retention Rate
-Calculate Customer Retention Rate. Namely, the proportion of customers who did
-not churned.
-
-```{r}
-retention_rate <- 1 - mean(Data$Churn == "True")
-retention_rate
-```
-
-### Average Customer Lifespan
-Estimate Average Customer Lifespan based on the assumption that if a fraction of
-customers churn each period, then on average, a customer will stay for 1/churn 
-rate periods. Lower "Churn Rate" means higher "Customer Lifespan".
-
-```{r}
-average_lifespan <- 1 / (1 - retention_rate)
-average_lifespan
-```
-
-### Customer Lifetime Value (CLV)
-
-```{r}
-CLV <- ARPU * average_lifespan
-CLV
-```
-
-```{r}
-Data <- Data %>%
-  mutate(CLV = TotalCharges * avg_customer_lifespan)
 
 ```
 
-Here we add to the Data the column "CLV".
 
-## Visualization
+### CLV Computation and Distribution
 
-Now that we have computed the CLV index, which is basically a summary of the
-various charges paid by each customer, we analyze it like we did for the
-other features in the EDA to gain insight about its distribution and its
-relation with some other features.
+Since our dataset did not include relevant features that could have been used for an insightful interpretation (since the dataset is mainly provided in order to train models to predict customer churn) we decided to aproximate the CLV. Customer Lifetime Value (CLV) is vital for predicting revenue, allocating resources efficiently, and segmenting customers for targeted marketing. It helps manage acquisition costs by ensuring they do not exceed the customer's lifetime value and supports strategic decision-making in product development, pricing, and customer relationship management. 
 
-### Distribution of CLV
+#### Computing CLV
 
-```{r}
+In the first place, we computed "Total charge" in order to estimate the revenue for each customer. 
+The average customer lifespan is another important metric needed to compute the CLV. We decided to compute it based on the assumption that if a fraction of customers churn each period, then, on average, a customer will stay for 1/churn rate periods. A lower Churn Rate indicates indeed an higher Customer Lifespan.
+We then proceeded by computing (approximating) the CLV as the product between the Total Charges for each customer and the average customer lifetime span.
+Ultimately, we calculated the total daily minutes as an additional "summary" metric representing the time a customer spends using the service each day. The creation of this index serves to enhance and expand our set of features for clustering analysis. By including total daily minutes, we aim to capture a more comprehensive picture of customer behavior, allowing for more accurate and insightful clustering results.
+
+```{r }
+
+Data$Total.charge = Data$Total.day.charge + Data$Total.eve.charge + 
+  Data$Total.night.charge + Data$Total.intl.charge #Total Charge
+
+churn_rate = mean(Data$Churn == "True") # Churn Rate
+retention_rate = 1 - churn_rate #Customer Retention Rate. 
+avg_customer_lifespan = 1 / churn_rate #AVG Customer Lifetime span
+
+Data$CLV = Data$Total.charge * avg_customer_lifespan
+
+Data$Total.minutes = Data$Total.day.minutes + Data$Total.eve.minutes + 
+  Data$Total.night.minutes + Data$Total.intl.minutes #Total Minutes
+
+```
+
+####  CLV Distribution
+
+Now that we have computed the CLV index, which is basically a summary of the various charges paid by each customer, we analyze it like we did for the other features in the EDA to gain insight about its distribution and its relation with some other features.
+
+```{r echo=FALSE}
 ggplot(Data, aes(x = CLV)) +
   geom_histogram(binwidth = 50, fill = "#0073C2FF", color = "black", alpha = 0.7) +
   theme_minimal(base_size = 15) +
@@ -1697,12 +1814,13 @@ ggplot(Data, aes(x = CLV)) +
   )
 ```
 
-The distribution of the CLV seems to be normal (a little bit skewed to the
-right) the highest value is around 400,00.
+The histogram shows that most customers have a Customer Lifetime Value (CLV) centered around 400 units, with the majority of values falling between 300 and 500. The distribution is slightly left-skewed, indicating some customers have significantly lower CLV. This central tendency suggests a typical customer profile, while the skew highlights opportunities for targeted retention strategies. Overall, the distribution provides insights for optimizing customer value and retention efforts.
 
-### CLV by Top Ten States
+##### CLV by Top Ten States
 
-```{r}
+Considering the dataset, understand if the CLV were distributed differently along states is an essential analysis to perform.
+
+```{r include=FALSE}
 # Identify the top ten most common states
 top_states <- Data %>%
   count(State, sort = TRUE) %>%
@@ -1714,7 +1832,7 @@ filtered_data <- Data %>% filter(State %in% top_states)
 
 ```
 
-```{r}
+```{r echo=FALSE}
 # CLV by State for Top Ten States
 ggplot(filtered_data, aes(x = State, y = CLV)) +
   geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
@@ -1733,76 +1851,58 @@ ggplot(filtered_data, aes(x = State, y = CLV)) +
 
 ```
 
-It seemed interesting to us gaining insight also about the distribution of CLV 
-by the top ten states.
+In general, the median CLV values are relatively similar across the states, indicating a consistent customer value distribution. However, some states exhibit greater variability, as evidenced by wider IQRs and more outliers.
 
-### CLV by International Plan
 
-```{r}
-# CLV by International Plan
-ggplot(Data, aes(x = International.plan, y = CLV)) +
-  geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
-  theme_minimal(base_size = 15) +
-  labs(
-    title = "CLV by International Plan",
-    x = "International Plan",
-    y = "Customer Lifetime Value (CLV)"
-  ) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    axis.title.x = element_text(face = "bold"),
-    axis.title.y = element_text(face = "bold")
-  )
+### CLUSTERING ALGORITHMS {.tabset .tabset-fade}
+
+In this section, we develop clustering algorithms to analyze customer segments. We will explore two clustering techniques: K-means and Hierarchical clustering. For this analysis, we focus on the features Account Length, Total Minutes, and Customer Lifetime Value (CLV). These features are selected because they are highly representative and particularly relevant for our objective of understanding customer behavior and optimizing retention strategies. By leveraging these clustering techniques, we aim to identify distinct customer groups that can inform targeted marketing and retention efforts.
+Also, a crucial step is to perform scaling on the dataset.
+
+
+``` {r}
+
+# Selection and normalization of the features
+clustering_data = Data[, c("Account.length", "CLV", "Total.minutes")]
+clustering_data_scaled = scale(clustering_data)
+
 ```
 
-### Clustering
+#### K-Means
 
-In this section we build up the clustering algorithms. We are going to try two 
-clustering techniques: K-means and Hierarchical clustering. In addition we are
-using the Elbow method to identify the optimal number of clusters (k). At the
-end, we are going to choose only one method to go on with.
+Firstly, we tried to segment customers with K-means clustering, a popular and efficient method for partitioning a dataset into distinct groups or clusters. K-means clustering aims to minimize the variance within each cluster, thereby maximizing the homogeneity of data points within clusters and the heterogeneity between clusters.
 
-## Clustering Features
+##### Identification of optimal number of clusters
 
-Selecting the features with which carry on the analysis. As said before, those 
-three variables are the ones that are more representative and useful for our
-purpose.
+We determined the optimal number of clusters using both the elbow method and the silhouette method. The elbow method identified the point where the within-cluster sum of squares (WSS) sharply decreases, indicating the optimal balance between model complexity and accuracy. The silhouette method measured how well data points fit within their assigned clusters compared to others. By comparing both methods, we ensured a robust and well-defined clustering solution.
 
-```{r}
-# Select features for clustering
-features <- Data %>%
-  select(Account.length, Total.minutes, CLV)
+```{r include= FALSE, warning=FALSE}
 
-# Normalize the features
-features_scaled <- scale(features)
-```
-
-### K-Means
-
-## Elbow Method K-Means
-
-```{r}
-# Determine the optimal number of clusters using the Elbow method
 set.seed(1)
-wss <- sapply(1:10, function(k) {
-  kmeans(features_scaled, centers = k, nstart = 10)$tot.withinss
+wss = sapply(1:10, function(k) {
+  kmeans(clustering_data_scaled, centers = k, nstart = 10)$tot.withinss
 })
 
-# Print the optimal number of clusters by identifying the elbow point
-optimal_k <- which(diff(diff(wss)) == min(diff(diff(wss)))) + 1
+silhouette_width = sapply(2:10, function(k) {
+  km = kmeans(clustering_data_scaled, centers = k, nstart = 10)
+  ss = silhouette(km$cluster, dist(clustering_data_scaled))
+  mean(ss[, 3])
+})
 
-# Create a data frame for plotting
-df <- data.frame(Clusters = 1:10, WSS = wss)
+```
 
-# Function to plot the Elbow method
-plot_elbow_method <- function(df, optimal_k) {
+```{r echo=FALSE, fig.width= 10}
+
+# Storing results
+k_means_elbow_method = data.frame(Clusters = 1:10, WSS = wss)
+k_means_silhouette_method = data.frame(Clusters = 2:10, Silhouette = silhouette_width)
+
+# Function to plot results
+plot_elbow_method = function(df, optimal_k) {
   ggplot(df, aes(x = Clusters, y = WSS)) +
     geom_line(color = "#0073C2FF", size = 1.2) +
     geom_point(color = "#0073C2FF", size = 3) +
-    geom_point(aes(x = optimal_k, y = WSS[optimal_k]), color = "red", size = 4) +
-    geom_text(aes(x = optimal_k, y = WSS[optimal_k], label = paste("Optimal k =", optimal_k)), 
-              color = "red", size = 5, hjust = -0.3, fontface = "bold") +
-    labs(title = "Elbow Method for Determining Optimal Number of Clusters",
+    labs(title = "Elbow Method",
          x = "Number of Clusters",
          y = "Total Within-Clusters Sum of Squares") +
     theme_minimal(base_size = 15) +
@@ -1816,90 +1916,137 @@ plot_elbow_method <- function(df, optimal_k) {
     )
 }
 
-# Call the function to plot the Elbow method
-plot_elbow_method(df, optimal_k)
-```
-
-We found out that the optimal number of clusters is 9. 
-
-## K-Means in action
-
-```{r}
-# Apply K-means clustering with the chosen number of clusters (k = 8)
-set.seed(1)
-kmeans_result <- kmeans(features_scaled, centers = 9, nstart = 25)
-
-# Append cluster results to the original data
-Data$Cluster <- as.factor(kmeans_result$cluster)
-
-# Visualize the clusters
-fviz_cluster(kmeans_result, data = features_scaled, geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
-
-```
-
-### Hierarchical Clustering
-
-Now it's the time of hierarchical.
-
-## Elbow method Hierarchical clustering
-
-```{r}
-# Compute the Distance Matrix
-distance_matrix <- dist(features_scaled)
-
-# Perform Hierarchical Clustering
-hc_result <- hclust(distance_matrix, method = "ward.D2")
-
-# Calculate the total within-cluster sum of square (wss) for different numbers of clusters
-set.seed(1)
-wss <- function(Data, max_clusters) {
-  wss_values <- numeric(max_clusters)
-  for (k in 1:max_clusters) {
-    hc <- hclust(dist(Data), method = "ward.D2")
-    cluster_assignments <- cutree(hc, k = k)
-    wss_values[k] <- sum(sapply(unique(cluster_assignments), function(cluster) {
-      cluster_data <- Data[cluster_assignments == cluster, ]
-      sum(dist(cluster_data)^2) / nrow(cluster_data)
-    }))
-  }
-  return(wss_values)
+# Function to plot Silhouette method
+plot_silhouette_method = function(df) {
+  ggplot(df, aes(x = Clusters, y = Silhouette)) +
+    geom_line(color = "#D9534F", size = 1.2) +
+    geom_point(color = "#D9534F", size = 3) +
+    labs(title = "Silhouette Method",
+         x = "Number of Clusters",
+         y = "Average Silhouette Width") +
+    ylim(0, 0.4) +
+    theme_minimal(base_size = 15) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", color = "black"),
+      axis.title = element_text(size = 16, face = "bold", color = "black"),
+      axis.text = element_text(size = 14, face = "bold", color = "black"),
+      panel.grid.major = element_line(color = "grey80"),
+      panel.grid.minor = element_line(color = "grey90"),
+      panel.background = element_rect(fill = "whitesmoke", color = NA)
+    )
 }
 
-# Define the maximum number of clusters to consider
-max_clusters <- 10
+plot_elbow = plot_elbow_method(k_means_elbow_method)
+plot_siluette = plot_silhouette_method(k_means_silhouette_method)
 
-# Compute the wss for each number of clusters
-wss_values_h <- wss(features_scaled, max_clusters)
+grid.arrange(plot_elbow, plot_siluette, ncol = 2)
 
-# Plot the Elbow Method
-plot(1:max_clusters, wss_values_h, type = "b", pch = 19, frame = FALSE, 
-     xlab = "Number of Clusters", ylab = "Within-cluster Sum of Squares", 
-     main = "Elbow Method for Finding Optimal k")
-
-# Print the optimal number of clusters by identifying the elbow point
-optimal_kh <- which(diff(diff(wss_values_h)) == min(diff(diff(wss_values_h)))) + 1
-
-points(optimal_kh, wss_values_h[optimal_kh], col = "red", pch = 19)
-text(optimal_kh, wss_values_h[optimal_kh], labels = paste("Elbow at k =", optimal_kh), pos = 4, col = "red")
 ```
 
-Surprisingly we found that also for hierarchical clustering we have an optimal k
-equal to 9.
 
-## Hierarchical clustering in action
+The Elbow Method plot shows the within-cluster sum of squares (WSS) against the number of clusters. As the number of clusters increases, the WSS decreases, indicating improved cluster compactness. The elbow point, where the rate of decrease sharply slows, suggests 2 clusters as an optimal balance between model complexity and accuracy.
+The Silhouette Method plot displays the average silhouette width against the number of clusters. The highest silhouette width is also observed at 2 clusters, indicating the best fit and most distinct cluster separation at this point.
+
+Although both methods indicate that 2 clusters are optimal, we chose to select 3 clusters. At 3 clusters, the WSS value is further minimized, and we are not overly concerned about overfitting. Additionally, selecting 3 clusters provides a more flexible and explorative framework, allowing us to uncover hidden patterns and structures in the data. This approach helps us identify distinct customer segments and gain a deeper understanding of the data.
+
+
+##### K-Means in action
+
+Once we have found the optimal value for k, it is possible to apply the k-means algorithm in order to to actually find and visualize customer segments (with dimensionality reduction).
 
 ```{r}
+# Apply K-means clustering with the chosen number of clusters 
+set.seed(1)
+kmeans_result = kmeans(clustering_data_scaled, centers = 3, nstart = 25)
+
+```
+
+```{r echo=FALSE}
+# Append cluster results to the original data
+Data$Cluster = as.factor(kmeans_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(kmeans_result, data = clustering_data_scaled, geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
+
+```
+
+The cluster plot shows the results of K-means clustering, displaying the distribution of data points across nine distinct clusters. The two dimensions, Dim1 and Dim2, are principal components derived from the original features, explaining 63% and 33.3% of the variance, respectively. We can see that the clusters are well-separated, indicating that the K-means algorithm has effectively partitioned the data into distinct groups.
+
+#### Hierarchical Clustering
+
+Hierarchical clustering builds a hierarchy of clusters without needing to pre-specify the number of clusters. It can be agglomerative (bottom-up), starting with individual observations and merging them, or divisive (top-down), starting with one cluster and splitting it.
+
+##### Different linkages methods analysis
+
+In this section, we perform hierarchical clustering on our dataset. To identify the best linkage method and the optimal number of clusters (k), we computed silhouette width values for various combinations. We consider the following linkage methods: Ward.D2, complete, average, single, and centroid linkage. For k, we test a range of values between 2 and 4, as these provided the best results in our preliminary analysis.
+
+
+```{r echo=FALSE}
+
+distance_matrix = dist(clustering_data_scaled)
+
+methods = c("complete", "single", "average", "centroid", "ward.D2")
+k_n = c(2,3,4)
+results = data.frame(Method = character(), 
+                     K = integer(), Silhouette_Width = numeric(), stringsAsFactors = FALSE)
+par(mfrow=c(1,5))
+for (method in methods){
+  hc_result = hclust(distance_matrix, method = method)
+  plot(hc_result, main = method)
+}
+
+```
+
+
+The results of hierarchical clustering are depicted in the dendrograms. Each horizontal line represents the merging or splitting of clusters at various levels of the hierarchy, with the height of the line indicating the distance or dissimilarity between the clusters when they are joined. 
+Complete Linkage offers balanced cluster compactness, while Single Linkage is prone to elongated clusters and noise sensitivity. Average Linkage produces more natural clusters, and Centroid Linkage shows size variations influenced by outliers. Ward’s Method forms compact, well-defined clusters, minimizing within-cluster variance, and is the most robust method.
+
+
+```{r echo=FALSE}
+
+# Compare silhouette at different ks with different linkages methods
+for (method in methods){
+  for (k in k_n){
+    cluster = hclust(distance_matrix, method = method)
+    silhouette_results = silhouette(cutree(cluster, k = k), distance_matrix)
+    silhouette_width = mean(silhouette_results[, "sil_width"])
+    results = rbind(results, data.frame(Method = method, K = k, Silhouette_Width = silhouette_width))
+  }
+}
+
+kable(results, caption = "Silhouette width with different k and linkages methods")
+
+```
+
+
+The table indicates that 2 clusters provide the highest result across all clustering methods, with single linkage achieving the highest silhouette width (0.5238) for K=2. However, single linkage often results in less compact clusters. Centroid and average linkage also perform well with reasonably high silhouette widths, suggesting they may offer more compact and well-defined clusters. In summary, 2 clusters are optimal, and while single linkage performs best, centroid and average linkage methods may be preferable for more cohesive clusters.
+However, since we aim to build a model that balances compactness and natural data representation Ward.D2 with k = 3 seems the best choice (in particular if we consider the dendogram) even if it has a lower silhouette width. Indeed, it creates very compact clusters and is often considered robust for many clustering tasks.
+
+
+##### Hierarchical clustering in action
+
+In order to have a more accurate representation of the segmentation, we report the dendogram cutting it at early stages so that it is more readable. 
+
+```{r echo=FALSE}
+hc_result = hclust(distance_matrix, method = "ward.D2")
 
 # Visualize the dendrogram
 plot(hc_result, cex = 0.5, main = "Dendrogram", xlab = "", sub = "", labels = FALSE)
-rect.hclust(hc_result, k = 9, border = 2:5)
+rect.hclust(hc_result, k = 3, border = 2:5)
 
-cutree_result_h <- cutree(hc_result, k = 9)
+cutree_result_h = cutree(hc_result, k = 3)
+
+
+```
+
+Subsequently, we visualize the segments in a lower dimensional space:
+
+```{r echo=FALSE}
 
 # Add the cluster labels to the original data
-Data$Cluster_h <- as.factor(cutree_result_h)
+Data$Cluster_h = as.factor(cutree_result_h)
 
-fviz_cluster(list(data = features_scaled, cluster = cutree_result),
+fviz_cluster(list(data = clustering_data_scaled, cluster = cutree_result_h),
              geom = "point",
              ellipse.type = "convex",
              palette = "jco",
@@ -1909,21 +2056,24 @@ fviz_cluster(list(data = features_scaled, cluster = cutree_result),
 
 ```
 
-## Digression on the two methods
 
-We ended up choosing the K-means since it represents in a clearer way the
-clusters without "overlapping" (problem that we encounter adopting the 
-hierarchical method).
+It is clear that the clusters are similar to the ones that we have found with k-mean algorithm. However, in this case there are noticeable overlaps between different clusters, indicating that some customer segments share similar characteristics. This overlap suggests that while hierarchical clustering has identified distinct groups, the boundaries between some clusters are not entirely clear-cut, reflecting the complexity and potential similarities within the dataset. 
 
-## Analysis of the Clusters
+### CLUSTERS ANALYSIS AND CONCLUSION
 
-```{r}
+#### Cluster Analysis
+
+Since K-means represents in a clearer way the clusters without "overlapping" (problem that we encountered adopting the hierarchical method), we decided to consider the latter for our final analysis.
+
+Initially, we analyze each cluster by plotting the mean values of the features used to construct the clusters. This allows us to understand the characteristic profiles of each cluster based on the key attributes that define them.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
 # Analyze cluster characteristics
 cluster_summary <- Data %>%
   group_by(Cluster) %>%
   summarize(across(c(Account.length, Total.minutes, CLV), mean, .names = "mean_{.col}")) %>%
   arrange(Cluster)
-
+library(tidyr)
 # Reshape the data for plotting
 cluster_summary_long <- cluster_summary %>%
   pivot_longer(cols = starts_with("mean_"), names_to = "Metric", values_to = "MeanValue") %>%
@@ -1948,6 +2098,13 @@ ggplot(cluster_summary_long, aes(x = Cluster, y = MeanValue, fill = Cluster)) +
     legend.position = "none"
   )
 
+```
+
+
+The most interesting results are observed in cluster 3, where customers have the highest CLV and Total Minutes values. This cluster highlights inefficiencies that Telecom is facing: despite its high CLV, cluster 3 does not have a particularly high mean account length, which is higher in cluster 2. Generally, many clusters with high CLV exhibit low account length, suggesting that the company may be overcharging its most active consumers. An exception is cluster 2, which likely represents a well-defined segment for which the company provides high-quality services. In contrast, cluster 1 shows the lowest values across all metrics, indicating a segment with lower engagement and value. This analysis suggests the need for targeted retention strategies, especially for high CLV customers with shorter account lengths, to optimize customer satisfaction and retention.
+
+
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 
 # Analyze the number of churned customers in each cluster
 churn_analysis <- Data %>%
@@ -1959,7 +2116,7 @@ ggplot(churn_analysis, aes(x = Cluster, y = Count, fill = Churn)) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_minimal(base_size = 15) +
   labs(
-    title = "Number of Churned Customers in Each Cluster",
+    title = "Churned Customers in Each Cluster",
     x = "Cluster",
     y = "Number of Customers",
     fill = "Churn Status"
@@ -1970,45 +2127,11 @@ ggplot(churn_analysis, aes(x = Cluster, y = Count, fill = Churn)) +
     axis.title.y = element_text(face = "bold"),
     legend.title = element_text(face = "bold")
   )
-
-
-# Analyze the Avg. CLV values in each cluster
-CLV_analysis <- Data %>%
-  group_by(Cluster) %>%
-  summarise(Max_CLV = max(CLV)) %>%
-  arrange(Cluster)
-
-ggplot(CLV_analysis, aes(x = Cluster, y = Max_CLV, fill = Cluster)) +
-  geom_bar(stat = "identity") +
-  theme_minimal(base_size = 15) +
-  labs(
-    title = "Maximum Customer Lifetime Value (CLV) in Each Cluster",
-    x = "Cluster",
-    y = "Maximum CLV",
-    fill = "Cluster"
-  ) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    axis.title.x = element_text(face = "bold"),
-    axis.title.y = element_text(face = "bold"),
-    legend.position = "none"
-  )
-
 ```
 
-We can see from the last two analyses that at the end 9 clusters came out. We
-also gained insight about the highest value of CLV in each cluster notice that
-the 7th cluster has the highest value overall and the number of customers
-that churned is bigger in the 7th cluster. This leads to the acknowledgement
-of the fact that the firm must adopt a certain treatment mainly to the 7th
-cluster of customers.
 
-## Conclusion
+The bar plot illustrates the number of churned (True) and non-churned (False) customers across various clusters, revealing significant insights into customer retention. Overall, the three clusters are fairly equally distributed in terms of customer count. Notably, cluster 3 stands out with the highest number of churned customers, despite having the highest Customer Lifetime Value (CLV). This discrepancy suggests that Telecom is struggling to retain its most valuable customers, likely due to dissatisfaction or unmet expectations.
 
-This analysis highlights key insights into customer churn and CLV in the telecom 
-sector. Specific attention should be given to clusters with high churn rates and 
-high CLV for targeted retention strategies. In this way the company would save 
-money and effort, optimizing in this way promotional strategies for customer 
-retention.
+To address this, Telecom should implement targeted retention strategies, such as personalized offers and improved customer service, to reduce churn and maximize the value of these high-CLV customers. This analysis highlights the critical need to focus on clusters with high churn rates and high CLV for targeted retention strategies, enabling the company to optimize promotional efforts and reduce costs. By implementing focused promotional campaigns and retention initiatives specifically for cluster 3, Telecom can effectively retain its most valuable customers, enhance overall customer satisfaction, and ultimately improve profitability by reducing churn among high-value segments.
 
 

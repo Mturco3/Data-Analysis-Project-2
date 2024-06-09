@@ -389,6 +389,8 @@ ggplot(Data, aes(x = Churn, y = `Total.day.minutes`, fill = Churn)) +
 anova_total_minutes = aov(Total.day.minutes ~ Churn, data = Data)
 summary(anova_total_minutes)
 
+t.test(Data$Total.day.minutes[which(Data$Churn == "True")], Data$Total.day.minutes[which(Data$Churn == "False")], paired = F, var.equal =F)
+
 # Dropping variables
 rm(anova_total_minutes)
 
@@ -434,8 +436,6 @@ corrplot(cor_matrix, method = "color", tl.srt = 45, tl.col = "black",
 
 # Showing why the two are highly correlated
 print(unique(round(Data$Total.day.charge/Data$Total.day.minutes,2)))
-
-
 
 ### CORRELATION WITH TARGET VARIABLE
 
@@ -2267,4 +2267,282 @@ roc_bic = roc(test_data$Churn,
               auc.polygon = TRUE, print.auc = TRUE)
 par(mfrow=c(1,1))
 
+
+# TASK 2 -> CLUSTERING
+
+# Importing again the dataset since it was cleaned
+
+Data = read.csv2("./Dataset/TelecomChurn.csv", 
+                 header = T, 
+                 sep = ",", 
+                 colClasses = "character")
+variables = colnames(Data)
+categorical_variables = c("State", "International.plan", "Voice.mail.plan", "Area.code")
+target_variable = "Churn"
+numerical_variables = setdiff(variables, c(categorical_variables, target_variable))
+predictors = setdiff(variables, target_variable)
+
+# Ensuring that variables are converted in the correct form
+Data[[target_variable]] = as.factor(Data[[target_variable]])
+for (var in numerical_variables) {
+  Data[[var]] = as.numeric(Data[[var]])
+}
+for (var in categorical_variables) {
+  Data[[var]] = as.factor(Data[[var]])
+}
+
+## Task 2 ##
+
+#CLV computation
+
+Data$Total.charge = Data$Total.day.charge + Data$Total.eve.charge + 
+  Data$Total.night.charge + Data$Total.intl.charge #Total Charge
+
+
+Data$Total.minutes = Data$Total.day.minutes + Data$Total.eve.minutes + 
+  Data$Total.night.minutes + Data$Total.intl.minutes #Total Charge
+
+churn_rate = mean(Data$Churn == "True") # Churn Rate
+retention_rate = 1 - churn_rate #Customer Retention Rate. 
+avg_customer_lifespan = 1 / churn_rate #AVG Customer Lifetime span
+
+Data$CLV = Data$Total.charge * avg_customer_lifespan
+
+# Distribution of CLV
+ggplot(Data, aes(x = CLV)) +
+  geom_histogram(binwidth = 50, fill = "#0073C2FF", color = "black", alpha = 0.7) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Distribution of Customer Lifetime Value (CLV)",
+    x = "Customer Lifetime Value (CLV)",
+    y = "Frequency"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+
+
+# Identify the top ten most common states
+top_states <- Data %>%
+  count(State, sort = TRUE) %>%
+  top_n(10, wt = n) %>%
+  pull(State)
+
+filtered_data <- Data %>% filter(State %in% top_states)
+
+# CLV by State for Top Ten States
+ggplot(filtered_data, aes(x = State, y = CLV)) +
+  geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "CLV by State (Top Ten States)",
+    x = "State",
+    y = "Customer Lifetime Value (CLV)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# CLV by International Plan
+ggplot(Data, aes(x = International.plan, y = CLV)) +
+  geom_boxplot(fill = "#0073C2FF", alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "CLV by International Plan",
+    x = "International Plan",
+    y = "Customer Lifetime Value (CLV)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+
+# Clustering
+
+# Selection and normalization of the features
+clustering_data = Data[, c("Account.length", "CLV", "Total.minutes")]
+clustering_data_scaled = scale(clustering_data)
+
+
+# Determine the optimal number of clusters using the Elbow and siloutte methods
+set.seed(1)
+wss = sapply(1:10, function(k) {
+  kmeans(clustering_data_scaled, centers = k, nstart = 10)$tot.withinss
+})
+
+silhouette_width = sapply(2:10, function(k) {
+  km = kmeans(clustering_data_scaled, centers = k, nstart = 10)
+  ss = silhouette(km$cluster, dist(clustering_data_scaled))
+  mean(ss[, 3])
+})
+
+
+# Storing results
+k_means_elbow_method = data.frame(Clusters = 1:10, WSS = wss)
+k_means_silhouette_method = data.frame(Clusters = 2:10, Silhouette = silhouette_width)
+
+# Function to plot results
+plot_elbow_method = function(df, optimal_k) {
+  ggplot(df, aes(x = Clusters, y = WSS)) +
+    geom_line(color = "#0073C2FF", size = 1.2) +
+    geom_point(color = "#0073C2FF", size = 3) +
+    labs(title = "Elbow Method",
+         x = "Number of Clusters",
+         y = "Total Within-Clusters Sum of Squares") +
+    theme_minimal(base_size = 15) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", color = "black"),
+      axis.title = element_text(size = 16, face = "bold", color = "black"),
+      axis.text = element_text(size = 14, face = "bold", color = "black"),
+      panel.grid.major = element_line(color = "grey80"),
+      panel.grid.minor = element_line(color = "grey90"),
+      panel.background = element_rect(fill = "whitesmoke", color = NA)
+    )
+}
+
+# Function to plot Silhouette method
+plot_silhouette_method = function(df) {
+  ggplot(df, aes(x = Clusters, y = Silhouette)) +
+    geom_line(color = "#D9534F", size = 1.2) +
+    geom_point(color = "#D9534F", size = 3) +
+    labs(title = "Silhouette Method",
+         x = "Number of Clusters",
+         y = "Average Silhouette Width") +
+    ylim(0, 0.4) +
+    theme_minimal(base_size = 15) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20, face = "bold", color = "black"),
+      axis.title = element_text(size = 16, face = "bold", color = "black"),
+      axis.text = element_text(size = 14, face = "bold", color = "black"),
+      panel.grid.major = element_line(color = "grey80"),
+      panel.grid.minor = element_line(color = "grey90"),
+      panel.background = element_rect(fill = "whitesmoke", color = NA)
+    )
+}
+
+plot_elbow = plot_elbow_method(k_means_elbow_method)
+plot_siluette = plot_silhouette_method(k_means_silhouette_method)
+
+grid.arrange(plot_elbow, plot_siluette, ncol = 2)
+
+
+# K mean application
+
+set.seed(1)
+kmeans_result = kmeans(clustering_data_scaled, centers = 3, nstart = 25)
+
+# Append cluster results to the original data and visualize the results
+Data$Cluster = as.factor(kmeans_result$cluster)
+fviz_cluster(kmeans_result, data = clustering_data_scaled, 
+             geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
+
+
+
+# Hierchical
+
+# Compute the Distance Matrix and perform Hierarchical Clustering
+distance_matrix = dist(clustering_data_scaled)
+
+methods = c("complete", "single", "average", "centroid", "ward.D2")
+k_n = c(2,3,4)
+results = data.frame(Method = character(), 
+                     K = integer(), Silhouette_Width = numeric(), stringsAsFactors = FALSE)
+par(mfrow=c(1,5))
+for (method in methods){
+  hc_result = hclust(distance_matrix, method = method)
+  plot(hc_result, main = method)
+}
+
+# Compare silhouette at different ks with different linkages methods
+for (method in methods){
+  for (k in k_n){
+    cluster = hclust(distance_matrix, method = method)
+    silhouette_results = silhouette(cutree(cluster, k = k), distance_matrix)
+    silhouette_width = mean(silhouette_results[, "sil_width"])
+    results = rbind(results, data.frame(Method = method, K = k, Silhouette_Width = silhouette_width))
+  }
+}
+
+print(results)
+
+
+hc_result = hclust(distance_matrix, method = "ward.D2")
+
+# Visualize the dendrogram
+plot(hc_result, cex = 0.5, main = "Dendrogram", xlab = "", sub = "", labels = FALSE)
+rect.hclust(hc_result, k = 3, border = 2:5)
+
+cutree_result_h = cutree(hc_result, k = 3)
+
+# Add the cluster labels to the original data
+Data$Cluster_h = as.factor(cutree_result_h)
+
+fviz_cluster(list(data = clustering_data_scaled, cluster = cutree_result_h),
+             geom = "point",
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal(),
+             main = "Cluster Visualization using Hierarchical Clustering")
+
+
+# Analyze cluster characteristics
+cluster_summary <- Data %>%
+  group_by(Cluster) %>%
+  summarize(across(c(Account.length, Total.minutes, CLV), mean, .names = "mean_{.col}")) %>%
+  arrange(Cluster)
+
+# Reshape the data for plotting
+cluster_summary_long <- cluster_summary %>%
+  pivot_longer(cols = starts_with("mean_"), names_to = "Metric", values_to = "MeanValue") %>%
+  mutate(Metric = factor(Metric, levels = c("mean_Account.length", "mean_Total.minutes", "mean_CLV"),
+                         labels = c("Account Length", "Total Minutes", "CLV")))
+
+# Plotting the cluster characteristics
+ggplot(cluster_summary_long, aes(x = Cluster, y = MeanValue, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Metric, scales = "free_y") +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Cluster Characteristics",
+    x = "Cluster",
+    y = "Mean Value",
+    fill = "Cluster"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+
+# Analyze the number of churned customers in each cluster
+churn_analysis <- Data %>%
+  group_by(Cluster, Churn) %>%
+  summarise(Count = n()) %>%
+  arrange(Cluster, Churn)
+
+ggplot(churn_analysis, aes(x = Cluster, y = Count, fill = Churn)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "Number of Churned Customers in Each Cluster",
+    x = "Cluster",
+    y = "Number of Customers",
+    fill = "Churn Status"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+
+####
 
