@@ -22,7 +22,7 @@ library(xgboost)
 library(doParallel)
 
 # Importing Dataset
-Data = read.csv2("./Dataset/TelecomChurn.csv", 
+Data = read.csv2("data/raw/TelecomChurn.csv", 
                  header = T, 
                  sep = ",", 
                  colClasses = "character")
@@ -2272,7 +2272,7 @@ par(mfrow=c(1,1))
 
 # Importing again the dataset since it was cleaned
 
-Data = read.csv2("./Dataset/TelecomChurn.csv", 
+Data = read.csv2("data/raw/TelecomChurn.csv", 
                  header = T, 
                  sep = ",", 
                  colClasses = "character")

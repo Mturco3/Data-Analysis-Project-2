@@ -58,7 +58,7 @@ The dataset consists of 3333 observations with 20 variables related to telecom c
 
 ```{r echo=FALSE, warning=FALSE}
 # Importing Dataset
-Data = read.csv2("./Dataset/TelecomChurn.csv", 
+Data = read.csv2("data/raw/TelecomChurn.csv", 
                  header = T, 
                  sep = ",", 
                  colClasses = "character")
@@ -1743,7 +1743,7 @@ For this task, we provided a customer segmentation which is based on the CLV ind
 ```{r include=FALSE}
 # Importing again the dataset since it was cleaned
 
-Data = read.csv2("./Dataset/TelecomChurn.csv", 
+Data = read.csv2("data/raw/TelecomChurn.csv", 
                  header = T, 
                  sep = ",", 
                  colClasses = "character")
