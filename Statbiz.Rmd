@@ -1,5 +1,5 @@
 ---
-title: "Final Project Data Analysis for Business - "
+title: "Telecom Churn Prediction and Customer Segmentation"
 output:
   html_document: default
   pdf_document: default
@@ -41,10 +41,10 @@ library(RColorBrewer)
 
 Group members:
 
--   Michele Turco (285251)
--   Giulio Presaghi(287611)
--   Edoardo Brown (281671)
--   Irene Benvenuti (288521)
+-   Michele Turco
+-   Giulio Presaghi
+-   Edoardo Brown
+-   Irene Benvenuti
 
 ## TASK 1 {.tabset .tabset-fade}
 
